@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/draft/Wildcard_Case_Studies.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:14:06 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Wildcard Case Studies</title>
+		<link rel="stylesheet" type="text/css" href="../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../release/1.0/docs/index.html">Docs</a><a href="../code.html">Code</a><a href="../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="index.html">draft</a></p>
+<style>
+pre {
+    font-family: "Courier New", Courier, monospace;
+}
+code {
+    font-family: "Courier New", Courier, monospace;
+}
+code i {
+    margin: 0 2px 0 0;
+}
+pre i {
+    margin: 0 2px 0 0;
+}
+.tp {
+    color: #b00;
+}
+.st {
+    font-family: "Arial Black", Gadget, sans-serif;
+    font-size: 75%;
+    color: #700;
+}
+h3 {
+    font-weight: 700;
+    margin-top: 20px;
+    display: table;
+    border-bottom: 1px solid #bbb;
+}
+div.toc {
+    display:table;
+    background-color: #f7f7f7;
+    border: 1px solid #aaa;
+    padding: 10px 30px 0 10px;
+}
+div.toc p {
+    font-weight: bold;
+    margin: 0 0 -10px 0;
+}
+</style>
+
+<h1>Wildcard Case Studies</h1>
+
+<p><em>Zhong Yu, 2015-09-01</em></p>
+<p>This is a compilation of wildcard use cases for the article <a href="Capturing_Wildcards.html">Capturing Wildcards</a></p>
+<div class=toc><p>Contents</p>
+<ul>
+  <li><a href=#Capture_Helper>Capture Helper</a></li>
+  <li><a href=#Map&amp;lt;?,?&amp;gt;_Entry_Set>Map&lt;?,?&gt; Entry Set</a></li>
+  <li><a href=#Inferred_Wild_Type>Inferred Wild Type</a></li>
+  <li><a href=#Supertypes_of_Integer>Supertypes of Integer</a></li>
+  <li><a href=#Capture_Everywhere>Capture Everywhere</a></li>
+  <li><a href=#Unexpected_Capture>Unexpected Capture</a></li>
+  <li><a href=#Unexpected_Non-Capture>Unexpected Non-Capture</a></li>
+  <li><a href=#Capture_Conversion>Capture Conversion</a></li>
+  <li><a href=#Subtyping>Subtyping</a></li>
+  <li><a href=#Casting_Between_Concrete_Types>Casting Between Concrete Types</a></li>
+  <li><a href=#Missing_Wildcards>Missing Wildcards</a></li>
+  <li><a href=#Tight_Bound>Tight Bound</a></li>
+  <li><a href=#Loose_Bound>Loose Bound</a></li>
+</ul>
+</div>
+
+
+<h2 id=Capture_Helper><a href=#Capture_Helper>Capture Helper</a></h2>
+
+<p>The classic example of <a href="Capturing_Wildcards.html#Capture_Helper">capture helper</a> is <code>reverse(List&lt;?&gt;)</code>, as shown in <a href="http://docs.oracle.com/javase/specs/jls/se8/html/jls-5.html#jls-5.1.10">JLS</a></p>
+<pre>
+void reverse(List&lt;?&gt; list)
+{
+    // difficult to work with wild type
+    // forward it to helper method
+
+    rev(list);
+}
+&lt;T&gt; void rev(List&lt;T&gt; listT)
+{
+    // read from and write back to `listT`
+    // which is easy on a concrete type
+    ...
+}
+</pre>
+
+<h2 id=Map&amp;lt;?,?&amp;gt;_Entry_Set><a href=#Map&amp;lt;?,?&amp;gt;_Entry_Set>Map&lt;?,?&gt; Entry Set</a></h2>
+
+<p>Given a <code>(Map&lt;?,?&gt; map)</code>, we can iterate its entries like</p>
+<pre>
+for(Entry&lt;?,?&gt; entry : map.entrySet())
+</pre>
+<p>This is deceptively simple, but we know it's more complex under the hood. First, <code>map</code> is capture converted to <code>Map&lt;<i>X<sub>1</sub></i>, <i>X<sub>2</sub></i>&gt;</code>, therefore, <a href="https://docs.oracle.com/javase/8/docs/api/java/util/Map.html#entrySet--"><code>entrySet()</code></a> returns <code>Set&lt;Entry&lt;<i>X<sub>1</sub></i>, <i>X<sub>2</sub></i>&gt;&gt;</code>. The <code>entry</code> variable can be declared as <code>Entry&lt;?,?&gt;</code>, because it's a supertype of <code>Entry&lt;<i>X<sub>1</sub></i>, <i>X<sub>2</sub></i>&gt;</code>.</p>
+<p>Following that example, someone may try this --</p>
+<pre>
+Set&lt;Entry&lt;?,?&gt;&gt; entrySet = map.entrySet(); // compile error
+</pre>
+<p>it doesn't work because <code>Set&lt;Entry&lt;<i>X<sub>1</sub></i>, <i>X<sub>2</sub></i>&gt;&gt;</code> is not a subtype of <code>Set&lt;Entry&lt;?,?&gt;&gt;</code>.</p>
+<p>We can add more wildcards to solve the problem, see <a href="Capturing_Wildcards.html#Nested_Wildcards">Nested Wildcards</a> and <a href="Capturing_Wildcards.html#Subtyping">Subtyping</a>.</p>
+<pre>
+Set&lt;? extends Entry&lt;?,?&gt;&gt; entrySet = map.entrySet();
+
+Iterator&lt;? extends Entry&lt;?,?&gt;&gt; iterator = entrySet.iterator();
+</pre>
+<p>But it is becoming too messy. A simpler way is to use a <a href="Capturing_Wildcards.html#Capture_Helper">capture helper</a> to do away with wildcards --</p>
+<pre>
+void foo(Map&lt;?,?&gt; map)
+{
+    foo2(map);
+}
+&lt;K,V&gt; void foo2(Map&lt;K,V&gt; map)
+{
+    Set&lt;Entry&lt;K,V&gt;&gt; entrySet = map.entrySet();
+    Iterator&lt;Entry&lt;K,V&gt;&gt; iterator = entrySet.iterator();
+    ...
+}
+</pre>
+<p>Source - <a href="http://stackoverflow.com/questions/16753587">http://stackoverflow.com/questions/16753587</a></p>
+
+<h2 id=Inferred_Wild_Type><a href=#Inferred_Wild_Type>Inferred Wild Type</a></h2>
+
+<p>The compiler often needs to infer a common supertype from two or more subtypes.</p>
+<p>For example, the type of a conditional expression (without target typing)</p>
+<pre>
+condition ? expr1 : expr2
+</pre>
+<p>is a common supertype of <code>expr1</code> and <code>expr2</code>. For <code>Exception</code> and <code>Error</code>, the supertype is inferred as <code>Throwable</code>.</p>
+<p>If the subtypes are parameterized types, the supertype may be inferred as a wild type. For example, <br> if <code>expr1</code> is <code>List&lt;Exception&gt;</code>, and <code>expr2</code> is <code>List&lt;Error&gt;</code>, the type of the conditional expression is inferred as <br> <code>List&lt;? extends Throwable&gt;</code> (which is then immediately capture converted).</p>
+<p>The algorithm to infer the supertype is <a href="http://docs.oracle.com/javase/specs/jls/se8/html/jls-4.html#jls-4.10.4">Least Upper Bound</a> which is very complicated, and may yield a very complicated wild type. However in most use cases, the programmer doesn't need to know the exact outcome of the algorithm.</p>
+<p>Let's see another example, if we invoke the method <a href="https://docs.oracle.com/javase/8/docs/api/java/util/Arrays.html#asList-T...-"><code>Arrays.asList</code></a></p>
+<pre>
+public static &lt;T&gt; List&lt;T&gt; asList(T... a)
+</pre>
+<p>with two arguments, one is <code>Set&lt;Exception&gt;</code> and another is <code>Set&lt;Error&gt;</code>, <code>T</code> will be inferred as <br> <code>Set&lt;? extends Throwable&gt;</code>, and the method will return <code>List&lt;Set&lt;? extends Throwable&gt;&gt;</code>.</p>
+
+<h2 id=Supertypes_of_Integer><a href=#Supertypes_of_Integer>Supertypes of Integer</a></h2>
+
+<p>What are the supertypes of <a href="https://docs.oracle.com/javase/8/docs/api/java/lang/Integer.html"><code>java.lang.Integer</code></a>?</p>
+<p>From the class definition, <code>Integer</code> inherits <code>Object, Number, Serializable, Comparable&lt;Integer&gt;</code>; these are all supertypes of <code>Integer</code>. <code>Integer</code> is also a supertype of itself.</p>
+<p>But that's not all. <code>Comparable&lt;Integer&gt;</code> has supertypes that are wild types. In fact</p>
+<pre>
+Comparable&lt;Integer&gt; <span class=st>&lt;:</span> Comparable&lt;? extends A&gt;  iff  Integer<span class=st>&lt;:</span>A
+</pre>
+<p>Therefore, for every supertype of <code>Integer</code>, we can construct another supertype, and so on.</p>
+<p>It is also the case that</p>
+<pre>
+Comparable&lt;Integer&gt; <span class=st>&lt;:</span> Comparable&lt;? super B&gt;  iff  B<span class=st>&lt;:</span>Integer
+</pre>
+<p>however, since <code>Integer</code> is <code>final</code>, <code>B</code> can only be <code>Integer</code> itself.</p>
+<p>Therefore the following examples are all supertypes of <code>Integer</code></p>
+<pre>
+Comparable&lt;? extends Integer&gt;
+Comparable&lt;? extends Comparable&lt;? extends Number&gt;&gt;
+Comparable&lt;? extends Comparable&lt;? extends Comparable&lt;? super Integer&gt;&gt;&gt;
+</pre>
+
+<h2 id=Capture_Everywhere><a href=#Capture_Everywhere>Capture Everywhere</a></h2>
+
+<p>This is a contrived example demonstrating pervasive capture conversions</p>
+<pre>
+List&lt;?&gt; list = ...;
+
+( condition ? list : list ).get(0);
+</pre>
+<p>The two <code>list</code> sub-expressions are capture converted first, to <code>List&lt;<i>X<sub>1</sub></i>&gt;</code> and <code>List&lt;<i>X<sub>2</sub></i>&gt;</code> respectively. The type of the parent conditional expression is then derived as the <a href="#Inferred_Wild_Type">least upper bound</a> of these two concrete types, which is <br><code>List&lt;? extends Object&gt;</code>. This type is then capture converted to <code>List&lt;<i>X<sub>3</sub></i>&gt;</code>, therefore <code>get(0)</code> returns <code><i>X<sub>3</sub></i></code>.</p>
+
+<h2 id=Unexpected_Capture><a href=#Unexpected_Capture>Unexpected Capture</a></h2>
+
+<p>Capture conversion is applied <a href="Capturing_Wildcards.html#Capture_Everywhere">everywhere</a>. This may surprise the programmer sometimes, because the type of an expression may not be what it seems to be. For example, the following code does not compile</p>
+<pre>
+    Class&lt;?&gt; c1 = ...;
+    Class&lt;?&gt; c2 = ...;
+
+    Collections.singleton(c1).add(c2); // compile error
+</pre>
+<p><a href="https://docs.oracle.com/javase/8/docs/api/java/util/Collections.html#singleton-T-"><code>Collections.&lt;<span class=tp>T</span>&gt;singleton</code></a> takes a <code><span class=tp>T</span></code> argument and returns a <code>Set&lt;<span class=tp>T</span>&gt;</code>. Naively, for <code>(Class&lt;?&gt; c1)</code> argument, we may expect that the method returns <code>Set&lt;Class&lt;?&gt;&gt;</code>, therefore <code>add(c2)</code> should work.</p>
+<p>But actually, the <code>c1</code> argument undergoes capture conversion first, changing its type to <code>Class&lt;<i>X<sub>1</sub></i>&gt;</code>. Therefore <code><span class=tp>T</span></code> is inferred as <code>Class&lt;<i>X<sub>1</sub></i>&gt;</code>, and <code>singleton(c1)</code> returns <code>Set&lt;Class&lt;<i>X<sub>1</sub></i>&gt;&gt;</code>. The <code>add()</code> method then has the signature <code>add(Class&lt;<i>X<sub>1</sub></i>&gt;)</code>, which does not accept the <code>c2</code> argument, which has the type (after capture) <code>Class&lt;<i>X<sub>2</sub></i>&gt;</code>.</p>
+<p>There is no way to suppress capture conversion here. A workaround is to explicitly specify <code><span class=tp>T</span>→Class&lt;?&gt;</code></p>
+<pre>
+    Collections.&lt;Class&lt;?&gt;&gt;singleton(c1).add(c2);  // compiles! (but fails at runtime:)
+</pre>
+<p>See also - <a href="http://stackoverflow.com/questions/30991884">http://stackoverflow.com/questions/30991884</a> (Mockito method chaining)</p>
+
+<h2 id=Unexpected_Non-Capture><a href=#Unexpected_Non-Capture>Unexpected Non-Capture</a></h2>
+
+<p>Capture conversion only affects wild types; on any other type, the type is left as is. For example</p>
+<pre>
+    &lt;T&gt; void rev(List&lt;T&gt; list){ ... }
+
+    &lt;L extends List&lt;?&gt;&gt; void test(L list)
+    {
+#a      rev( (List&lt;?&gt;)list );  // ok
+
+#b      rev( list );           // compile error
+    }
+</pre>
+<p><code>Line#a</code> compiles, because the argument type is <code>List&lt;?&gt;</code>, which is capture converted to <code>List&lt;<i>X</i>&gt;</code>, and type inference concludes that <code>T=<i>X</i></code> for <code>rev()</code>. See <a href="#Capture_Helper">Capture Helper</a></p>
+<p><code>Line#b</code> does not compile, because the argument type is <code>L</code>, which is not subject to capture conversion, even though it <em>is-a</em> <code>List&lt;?&gt;</code>. Type inference then fails -- no <code>T</code> can be found so that <code>L <span class=st>&lt;:</span> List&lt;T&gt;</code>.</p>
+<p>This is a curious example where a subtype (<code>L</code>) cannot be used where a supertype (<code>List&lt;?&gt;</code>) works; an upcast is required. This might be an oversight of the spec and may be fixed in future.</p>
+<p>Source - <a href="http://stackoverflow.com/a/30624513/2158288">http://stackoverflow.com/a/30624513/2158288</a></p>
+
+<h2 id=Capture_Conversion><a href=#Capture_Conversion>Capture Conversion</a></h2>
+
+<p>In most cases, capture conversion is pretty simple, like <code>List&lt;?&gt; ⇒<sub>c</sub> List&lt;<i>X</i>&gt;</code>.</p>
+<p>However, it gets a little more complicated for more complex type parameters. The classic example is <a href="https://docs.oracle.com/javase/8/docs/api/java/lang/Enum.html"><code>Enum&lt;E&gt;</code></a></p>
+<pre>
+class Enum&lt; E extends Enum&lt;E&gt; &gt;
+</pre>
+<p>The bound of <code>E</code> references itself. During capture conversion, the bound of <code>E</code> needs to be substituted too</p>
+<pre>
+Enum&lt;? extends Runnable&gt;   ⇒<sub>c</sub>   Enum&lt;<i>X</i>&gt; where <i>X</i> <span class=st>&lt;:</span> Runnable &amp; Enum&lt;<i>X</i>&gt;
+</pre>
+
+<h2 id=Subtyping><a href=#Subtyping>Subtyping</a></h2>
+
+<p><a href="Capturing_Wildcards.html#Subtyping">Subtyping</a> analysis requires capture conversion on wild types. For example, given this generic declaration</p>
+<pre>
+interface Data&lt;T&gt; extends List&lt;List&lt;T&gt;&gt;
+</pre>
+<p>To analyze subtyping between wild types of <code>Data</code> and <code>List</code></p>
+<pre>
+Data&lt;? extends Number&gt;   ⇒<sub>c</sub>   Data&lt;<i>X</i>&gt; where <i>X</i><span class=st>&lt;:</span>Number
+
+   Data&lt;<i>X</i>&gt;
+<span class=st>&lt;:</span> List&lt;List&lt;<i>X</i>&gt;&gt;
+<span class=st>&lt;:</span> List&lt;? extends List&lt;<i>X</i>&gt;&gt;
+<span class=st>&lt;:</span> List&lt;? extends List&lt;? extends Number&gt;&gt;
+
+   Data&lt;? extends Number&gt;
+<span class=st>&lt;:</span> List&lt;? extends List&lt;? extends Number&gt;&gt;
+</pre>
+<p>Note that <code>Data&lt;?&gt;</code> is not a <code>List&lt;List&lt;?&gt;&gt;</code>, see <a href="Capturing_Wildcards.html#Nested_Wildcards">Nested Wildcard</a>.</p>
+
+<h2 id=Casting_Between_Concrete_Types><a href=#Casting_Between_Concrete_Types>Casting Between Concrete Types</a></h2>
+
+<p>Suppose for some reason we have to cast a <code>Supplier&lt;Integer&gt;</code> to <code>Supplier&lt;Number&gt;</code>, which we know is safe at runtime because of type erasure. Direct casting is forbidden --</p>
+<pre>
+Supplier&lt;Integer&gt; supplier = ...;
+
+(Supplier&lt;Number&gt;)supplier // error!
+</pre>
+<p>which makes perfect sense because the two types are <a href="Capturing_Wildcards.html#Concrete_Type">mutually exclusive</a>, therefore casting is provably incorrect.</p>
+<p>But we want to force the cast anyway; this can be done by up-casting to a common supertype first, followed by down-casting. Obviously, we can always use <code>Object</code> as the supertype between any two types</p>
+<pre>
+           (Apple)(Object)orange
+
+(Supplier&lt;Number&gt;)(Object)supplier
+</pre>
+<p>but it's probably a good practice to use a supertype that's closer to the two types</p>
+<pre>
+(Supplier&lt;Number&gt;)(Supplier&lt;? extends Number&gt;)supplier
+</pre>
+<p>If that's too ugly, maybe use an unbounded wildcard</p>
+<pre>
+(Supplier&lt;Number&gt;)(Supplier&lt;?&gt;)supplier
+</pre>
+<p>This is about on-site casting. For other ways of conversions, see <a href="#Missing_Wildcards">Missing Wildcards</a>.</p>
+
+<h2 id=Missing_Wildcards><a href=#Missing_Wildcards>Missing Wildcards</a></h2>
+
+<p>It is not uncommon that a method signature forgets to include proper wildcards. Such mistakes exist even in core Java APIs which were designed under a lot of scrutiny. <!-- e.g. Stream.generate() --> Interestingly, it seldom causes any problems to API users; and, when problems do arise, there are simple workarounds ( <em>requires Java 8</em> ).</p>
+<p>This observation can be used to justify <em>deliberately</em> omitting wildcards in APIs, to escape from <a href="http://localhost:8088/draft/Capturing_Wildcards.html#Wildcard_Hell">Wildcard Hell</a>.</p>
+<p>Consider the following method signature which lacks proper wildcards</p>
+<pre>
+void foo(Function&lt;String, Number&gt; func)
+</pre>
+<p>we won't be able to pass compatible functions to it</p>
+<pre>
+    Function&lt;CharSequence, Integer&gt; f = ...;
+
+    foo( f ); // error!
+</pre>
+<p>However, it usually isn't a problem, because in most use cases, the argument is a lambda expression or method reference, and compiler type inference takes care of providing the desired target type</p>
+<pre>
+Integer str2int(CharSequence chars){ ... }
+
+...
+    foo( str-&gt;str2int(str) );  // ok!
+
+    foo( this::str2int );      // ok!
+</pre>
+<p>If the argument is an expression of a fixed static type, in majority cases it happens to be the right type -- the target type.</p>
+<p>In rare cases, like <code>foo(f)</code>, the argument type doesn't match, and we need to convert it. On-site <a href="#Casting_Between_Concrete_Types">casting</a> is possible, but way too ugly. For functional interfaces, conversion can be done simply by method reference</p>
+<pre>
+    Function&lt;CharSequence, Integer&gt; f = ...;
+
+    foo( f );         // error!
+    foo( f::apply );  // ok!
+</pre>
+<p>However, the purpose of <code>f::apply</code> might be unclear to readers of the code. Personally, I'd like to use a help method to make the intent clear that I'm doing a variant cast -- <!-- it requires Java8 type inference --></p>
+<pre>
+    foo( vary(f) );
+...
+
+@SuppressWarnings(&quot;unchecked&quot;)
+public static &lt;T,R&gt; Function&lt;T,R&gt; vary(Function&lt;? super T, ? extends R&gt; f0)
+{
+    return (Function&lt;T,R&gt;)f0;  // erasure
+}
+</pre>
+<p>The implementation of <code>vary()</code> depends on type erasure; it is perfectly safe at runtime, because method <code>f0.apply()</code> indeed accepts any <code>T</code> and returns an <code>R</code>, therefore <code>f0</code> can be safely used as a <code>Function&lt;T,R&gt;</code>.</p>
+<p>Similarly, we can define a <code>vary()</code> method for each functional interface that's intuitively variant, like <code>Consumer</code> etc.</p>
+<p>For interfaces like <code>List</code>, we'll need two helper methods, one for covariant cast, and one for contravariant.</p>
+<pre>
+public static &lt;T&gt; List&lt;T&gt; covary(List&lt;? extends T&gt; list) { return (List&lt;T&gt;)list; }
+
+double sum(List&lt;Number&gt; list) // no wildcard!
+
+// usage
+    List&lt;Integer&gt; intList = ...;
+    sum( covary(intList) );
+</pre>
+<p>If we are sure that <code>sum()</code> wants a list of <code>Number</code> in a covariant sense, we can safely pass it a <code>List&lt;Integer&gt;</code> this way.</p>
+
+<h2 id=Tight_Bound><a href=#Tight_Bound>Tight Bound</a></h2>
+
+
+<h3>? extends String</h3>
+
+<p>Occasionally we may encounter types like <code>List&lt;? extends String&gt;</code>, with a wildcard upper-bounded by a <code>final</code> class. It's unlikely that the programmer voluntarily constructs a type like that. Most likely it's imposed by a <code>List&lt;? extends T&gt;</code> in some generic API which happens to be substituted with <code>T→String</code>.</p>
+<p><code>List&lt;? extends String&gt;</code> seems odd. Since <code>String</code> is a <code>final</code> class, the only subtype is <code>String</code> itself. Therefore it's tempting to think that <code>List&lt;? extends String&gt;</code> is the same as <code>List&lt;String&gt;</code>.</p>
+<p>However, as far as the compiler is concerned, they are two distinct types. This is because <code>final</code> is not final; it is possible that someday <code>String</code> class removes the <code>final</code> modifier, and new subclasses of <code>String</code> are introduced.</p>
+<p>Therefore, <code>List&lt;? extends String&gt; ≠ List&lt;String&gt;</code>; in particular, this <a href="Capturing_Wildcards.html#Subtyping">subtyping</a> is false</p>
+<pre>
+List&lt;? extends String&gt; <span class=st>&lt;:</span> List&lt;String&gt;
+</pre>
+<p>Although, as a practical matter, if we have to, we may cast <code>List&lt;? extends String&gt;</code> to <code>List&lt;String&gt;</code>, reasoning that it must be safe at runtime, as long as <code>String</code> stays <code>final</code>.</p>
+
+<h3>? super Object</h3>
+
+<p>On the other hand, what about <code>List&lt;? super Object&gt;</code>? The only supertype of <code>Object</code> is <code>Object</code> itself, therefore, aren't <code>List&lt;? super Object&gt;</code> and <code>List&lt;Object&gt;</code> the same type?</p>
+<p>If two types are subtypes of each other, they are the same type, or at least, they are semantically equivalent. So the question is whether the <a href="Capturing_Wildcards.html#Subtyping">subtyping</a> algorithm agrees that</p>
+<pre>
+List&lt;? super Object&gt; <span class=st>&lt;:</span> List&lt;Object&gt;
+</pre>
+<p>which depends on whether the subtyping is true on the capture conversion</p>
+<pre>
+List&lt;<i>X</i>&gt; <span class=st>&lt;:</span> List&lt;Object&gt; for any <i>X</i> that Object<span class=st>&lt;:</span><i>X</i>
+</pre>
+<p>The reasonable answer is yes. And <code>javac</code> seems to agree that <code>List&lt;? super Object&gt; = List&lt;Object&gt;</code>. For example the following code compiles without any problem</p>
+<pre>
+void test( Set&lt; List&lt;? super Object&gt; &gt; x, Set&lt; List&lt;Object&gt; &gt; y )
+{
+    x = y;
+    y = x;
+}
+</pre>
+
+<h2 id=Loose_Bound><a href=#Loose_Bound>Loose Bound</a></h2>
+
+<p>We have the following <a href="Capturing_Wildcards.html#Subtyping">subtyping</a> property</p>
+<pre>
+•  G&lt;? extends B&gt; <span class=st>&lt;:</span> G&lt;? extends A&gt;  if  B<span class=st>&lt;:</span>A
+</pre>
+<p>However, the converse may not be true, because we also have to consider the bound of the type-parameter.</p>
+<p>For example, consider this generic declaration</p>
+<pre>
+class Foo&lt;T extends Exception&gt;
+</pre>
+<p>The following wild types are all equivalent, and they are subtypes of each other</p>
+<pre>
+Foo&lt;? extends Object&gt;
+Foo&lt;? extends Throwable&gt;
+Foo&lt;? extends Serializable&gt;
+Foo&lt;? extends Exception&gt;
+</pre>
+<p>because, the wildcard bounds provide no more restriction than the type-parameter bound. During capture conversion,</p>
+<pre>
+Exception = Exception&amp;Throwable = Exception&amp;Serializable
+</pre>
+<p>In essence, what's really important to a wild type is its capture conversion, not its syntactic form.</p>
+<hr/>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/draft/Wildcard_Case_Studies.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:14:06 GMT -->
+</html>

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/release/0.9/docs/http/Entity_and_Body.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:12:38 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Entity and Body</title>
+		<link rel="stylesheet" type="text/css" href="../../../../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../../../../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../../../../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../../../../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../../../1.0/docs/index.html">Docs</a><a href="../../../../code.html">Code</a><a href="../../../../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="../index.html">Docs</a> &gt; <a href="Http_Server.html">Http Server</a> &gt; <a href="Entity_and_Body.html">Entity and Body</a></p>
+
+<h1>Entity and Body</h1>
+
+<p>An http request or response may contain an "entity", representing the resource being transferred. This is modeled by interface <a href="../../javadoc/bayou/http/HttpEntity.html" class=api><code>HttpEntity</code></a>, which contains metadata like <a href="../../javadoc/bayou/http/HttpEntity.html#contentType--" class=api><code>contentType</code></a>, and a <a href="../../javadoc/bayou/http/HttpEntity.html#body--" class=api><code>body</code></a> which is an async byte source.</p>
+
+<h2 id=Request_Entity><a href=#Request_Entity>Request Entity</a></h2>
+
+<p>Whether an http request contains an entity usually depends on the request method, see <a href="../../javadoc/bayou/http/HttpRequest.html#entity--" class=api><code>HttpRequest.entity()</code></a>.</p>
+<p>See <a href="Form_Handling.html">Form Handling</a> and <a href="Http_Server.html#Json">Json</a> for parsing Form and Json request bodies.</p>
+<p>If you want to directly handle entity body bytes, read them from <a href="../../javadoc/bayou/http/HttpEntity.html#body--" class=api><code>entity.body()</code></a> which is an async <a href="../../javadoc/bayou/bytes/ByteSource.html" class=api><code>ByteSource</code></a>. If the body is expected to be small, you can use the convenience methods <a href="../../javadoc/bayou/bytes/ByteSource.html#readAll-int-" class=api><code>readAll</code></a> or <a href="../../javadoc/bayou/bytes/ByteSource.html#asString-int-" class=api><code>asString</code></a></p>
+<pre>
+Async&lt;ByteBuffer&gt; bodyBytes = body.readAll( /*max*/1000 );
+// or
+Async&lt;String&gt; bodyString = body.asString( /*max*/1000 );
+</pre>
+<p>If the body is potentially big, try</p>
+<pre>
+AsyncIterator.forEach( body::read, (ByteBuffer bb)-&gt;{ /* handle bytes */ } )
+</pre>
+
+<h2 id=Response_Entity><a href=#Response_Entity>Response Entity</a></h2>
+
+<p>In most cases, an <a href="../../javadoc/bayou/http/HttpResponse.html" class=api><code>HttpResponse</code></a> contains an entity, see <a href="../../javadoc/bayou/http/HttpResponse.html#entity--" class=api><code>HttpResponse.entity()</code></a>.</p>
+<p>Note that the response entity body is a <a href="../../javadoc/bayou/bytes/ByteSource.html" class=api><code>ByteSource</code></a>, not a sink. The server pulls data from the body when it needs to.</p>
+<p>Bayou provides some implementations of <code>HttpEntity</code> and <code>ByteSource</code>, for example, <a href="../../javadoc/bayou/file/FileHttpEntity.html" class=api><code>FileHttpEntity</code></a>, <a href="../../javadoc/bayou/file/FileByteSource.html" class=api><code>FileByteSource</code></a>.</p>
+<p>In the following sections, we will program a custom entity and body from scratch.</p>
+
+<h2 id=ByteSource><a href=#ByteSource>ByteSource</a></h2>
+
+<p>The <a href="../../javadoc/bayou/bytes/ByteSource.html#read--" class=api><code>ByteSource.read()</code></a> method yields data asynchronously. If EOF is reached, the read action fails with <a href="../../javadoc/bayou/util/End.html" class=api><code>End</code></a>.</p>
+<p>Let's define a source that yields letters <code>&#39;A&#39;</code> to <code>&#39;Z&#39;</code>, one letter at a time</p>
+<pre>
+public class AzSource implements ByteSource
+{
+    byte c = &#39;A&#39;;
+
+    @Override
+    public Async&lt;ByteBuffer&gt; read()
+    {
+        if(c&gt;&#39;Z&#39;)
+            return End.async();
+
+        ByteBuffer bb = ByteBuffer.wrap(new byte[]{c++});
+        return Async.success(bb);
+    }
+
+    @Override
+    public Async&lt;Void&gt; close()
+    {
+        return Async.VOID;
+    }
+}
+</pre>
+
+<h2 id=HttpEntity><a href=#HttpEntity>HttpEntity</a></h2>
+
+<p>The minimal requirement for an entity is <code>body</code> and <code>contentType</code></p>
+<pre>
+public class AzEntity implements HttpEntity
+{
+    @Override
+    public ByteSource body()
+    {
+        return new AzSource();
+    }
+
+    @Override
+    public ContentType contentType()
+    {
+        return ContentType.text_plain_US_ASCII;
+    }
+}
+</pre>
+<p>Now we can create a response with the entity</p>
+<pre>
+    return new HttpResponseImpl(HttpStatus.c200_OK, new AzEntity());
+</pre>
+
+<h2 id=Entity_Metadata><a href=#Entity_Metadata>Entity Metadata</a></h2>
+
+<p>The entity's <a href="../../javadoc/bayou/http/HttpEntity.html#contentLength--" class=api><code>contentLength</code></a> is optional. If not provided, the response body will be "chunked". Since <code>AzSource.read()</code> produces data immediately, actually only one chunk is created containing all 26 bytes.</p>
+<p>If <code>contentLength</code> is provided, it must be consistent with the number of bytes in the body</p>
+<pre>
+    @Override
+    public Long contentLength()
+    {
+        return 26L;
+    }
+</pre>
+<p>Since the entity is a never-changing constant, we may give it a very long expiration, and fixed <code>Last-Modified</code> and <code>ETag</code></p>
+<pre>
+    @Override
+    public Instant expires()
+    {
+        return Instant.MAX;
+    }
+
+    @Override
+    public Instant lastModified()
+    {
+        return Instant.MIN;
+    }
+</pre>
+<p>The default <a href="../../javadoc/bayou/http/HttpEntity.html#etag--" class=api><code>etag()</code></a> is based on <code>lastModified</code>, which is fine, but probably unnecessarily long here. We can just assign it a constant value</p>
+<pre>
+    @Override
+    public String etag()
+    {
+        return &quot;0&quot;;
+    }
+</pre>
+<p>For a more realistic entity, we should assign more sensible <code>Expires</code>, <code>Last-Modified</code>, <code>ETag</code> values.</p>
+
+<h2 id=Async_Body><a href=#Async_Body>Async Body</a></h2>
+
+<p>Let's add some delays to <code>AzSource.read()</code>, so that it is genuinely asynchronous</p>
+<pre>
+    @Override
+    public Async&lt;ByteBuffer&gt; read()
+    {
+        return Fiber
+            .sleep(Duration.ofSeconds(1))
+            .map( v-&gt; read0() );
+    }
+
+    ByteBuffer read0() throws End
+    {
+        if(c&gt;&#39;Z&#39;)
+            throw End.instance();
+        return ByteBuffer.wrap(new byte[]{c++});
+    }
+</pre>
+<p>On the browser, we'll see that letters are coming out one at a time.</p>
+<p>We can optionally implement <a href="../../javadoc/bayou/bytes/ByteSource.html#skip-long-" class=api><code>ByteSource.skip(n)</code></a> to help Range requests:</p>
+<pre>
+    @Override
+    public long skip(long n)
+    {
+        c += n; // bug: numeric overflow
+        return n;
+    }
+</pre>
+
+<h2 id=Response_Body_as_Sink><a href=#Response_Body_as_Sink>Response Body as Sink</a></h2>
+
+<p>If you want to treat the response body as a <a href="../../javadoc/bayou/bytes/ByteSink.html" class=api><code>ByteSink</code></a> instead, you can use <a href="../../javadoc/bayou/bytes/BytePipe.html" class=api><code>BytePipe</code></a></p>
+<pre>
+public class MyEntity implements HttpEntity
+{
+    @Override
+    public ByteSource body()
+    {
+        BytePipe pipe = new BytePipe();
+
+        ByteSink sink = pipe.sink();
+        AsyncIterator
+            .ofInts(&#39;A&#39;, &#39;A&#39;+26)
+            .forEach_( i-&gt; sink.write( i2bb(i) ) )
+            .finally_( sink::close );
+
+        return pipe.source();
+    }
+
+    ByteBuffer i2bb(int i)
+    {
+        return ByteBuffer.wrap(new byte[]{(byte)i});
+    }
+</pre>
+<p>However, async programming with sink is not easy in general. You are probably better off with modeling the body as a <code>ByteSource</code>, even if it requires a lot of bookkeeping of internal states.</p>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/release/0.9/docs/http/Entity_and_Body.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:12:39 GMT -->
+</html>

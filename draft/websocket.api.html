@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/draft/websocket.api.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:11:47 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Should WebSocket Server API Be Event Based?</title>
+		<link rel="stylesheet" type="text/css" href="../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../release/1.0/docs/index.html">Docs</a><a href="../code.html">Code</a><a href="../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="index.html">draft</a></p>
+
+<h1>Should WebSocket Server API Be Event Based?</h1>
+
+<p><em>Zhong Yu, 2014-07-24</em></p>
+<p>Most server-side WebSocket APIs are event-based, that is, the application provides callbacks in response to events like <code>onMessage</code>, <code>onError</code>. The application code is passive, invoked only by the framework when events occur.</p>
+<p>This is different from the traditional socket API, which provides methods like <code>read()</code> to be invoked by the application. The application code controls logic flow, it calls <code>read()</code> whenever it chooses to.</p>
+<p>The difference is a little odd, since WebSocket is not much different from TCP socket, both are full-duplex transport protocols. We would have thought that applications will interact with both protocols in similar ways.</p>
+<p>The event-based API has an apparent problem that the application is subject to the whim of the remote peer, because it has to handle inbound messages even when none is expected. For example, suppose the application protocol is half-duplex request-response style; when the application is still processing request#1, which takes some time, request#2 comes in and is shoved to the application. The problem can be solved or avoided in various ways, but none is as natural as letting the application poll the inbound when it chooses to.</p>
+<p>That being said, the event-based design is obviously a success in practice, people are using it happily to build their WebSocket applications. This is probably because in most use cases to date, the client and server applications are written by the same team, there are implicit cooperation and coordination between the two ends. It is possible that the event-based API is perfectly fine for typical WebSocket applications we've been seeing so far.</p>
+<p>Nevertheless, WebSocket is a more general transport protocol, it's not limited to javascript apps embedded in web pages. We can imagine that WebSocket is used in certain applications where traditionally TCP socket would have been used, because WebSocket may penetrate some firewalls that disallow generic TCP connections. These applications would likely prefer to interact with WebSocket the same way they would with TCP socket.</p>
+<p>For that reason, we design our WebSocket API to mirror traditional socket API, so that applications can have more control in case they need to. See <a href="../release/1.0/docs/ws/WebSocket_Server.html#WebSocketChannel">WebSocketChannel</a>. Of course, if an application really wants an event-based API instead, it's very easy to build a DIY one on top of our API.</p>
+<p><em>Contact: <a href="mailto:&#98;&#97;&#x79;&#111;&#x75;&#45;&#105;&#111;&#x40;&#x67;&#x6f;&#111;&#103;&#108;&#x65;&#x67;&#114;&#111;u&#x70;s&#46;&#99;o&#x6d;">&#98;&#97;&#x79;&#111;&#x75;&#45;&#105;&#111;&#x40;&#x67;&#x6f;&#111;&#103;&#108;&#x65;&#x67;&#114;&#111;u&#x70;s&#46;&#99;o&#x6d;</a></em></p>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/draft/websocket.api.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:11:47 GMT -->
+</html>

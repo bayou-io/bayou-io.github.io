@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/release/0.9/docs/http/Server_SSL_Configuration.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:12:39 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Server SSL Configuration</title>
+		<link rel="stylesheet" type="text/css" href="../../../../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../../../../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../../../../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../../../../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../../../1.0/docs/index.html">Docs</a><a href="../../../../code.html">Code</a><a href="../../../../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="../index.html">Docs</a> &gt; <a href="Http_Server.html">Http Server</a> &gt; <a href="Server_SSL_Configuration.html">Server SSL Configuration</a></p>
+
+<h1>Server SSL Configuration</h1>
+
+
+<h2 id=SSL_Ports><a href=#SSL_Ports>SSL Ports</a></h2>
+
+<p>SSL can be enabled on an <code>HttpServer</code> by adding <a href="../../javadoc/bayou/http/HttpServerConf.html#sslPort-int...-" class=api><code>sslPort(...)</code></a></p>
+<pre>
+server.conf()
+    .port   (  80 )
+    .sslPort( 443 )
+    .sslKeyStore( &quot;./server-certs.jks&quot;, PASSWORD )
+</pre>
+<p>The same port can be used to server both plain and SSL connections; this is convenient for local development.</p>
+<pre>
+server.conf()
+    .port   ( 8080 )
+    .sslPort( 8080 )
+    .sslKeyStore( &quot;./localhost.jks&quot;, &quot;password&quot; )
+</pre>
+
+<h2 id=Server_Certificates><a href=#Server_Certificates>Server Certificates</a></h2>
+
+<p>The <em>key store</em> file for server certificates can be specified by <a href="../../javadoc/bayou/http/HttpServerConf.html#sslKeyStore-java.lang.String-java.lang.String-" class=api><code>sslKeyStore(filePath,password)</code></a>; it's a convenience method for <a href="../../javadoc/bayou/http/HttpServerConf.html#sslContext-javax.net.ssl.SSLContext-" class=api><code>sslContext</code></a> and <a href="../../javadoc/bayou/ssl/SslConf.html" class=api><code>SslConf</code></a>, equivalent to</p>
+<pre>
+server.conf().sslContext( new SslConf()
+        .keyStoreFile(filePath)
+        .keyStorePass(password)
+        .createContext()
+);
+</pre>
+
+<h3>SNI</h3>
+
+<p>To enable <a href="http://en.wikipedia.org/wiki/Server_Name_Indication">SNI</a> support on the server side, we need the "PKIX" <a href="../../javadoc/bayou/ssl/SslConf.html#keyManagerFactoryAlgorithm-java.lang.String-" class=api><code>KeyManagerFactory algorithm</code></a></p>
+<pre>
+server.conf().sslContext( new SslConf()
+        .keyStoreFile(&quot;./server-certs.jks&quot;)
+        .keyStorePass(PASSWORD)
+        .keyManagerFactoryAlgorithm(&quot;PKIX&quot;) // for SNI
+        .createContext()
+);
+</pre>
+
+<h2 id=Client_Certificates><a href=#Client_Certificates>Client Certificates</a></h2>
+
+<p>If the server <a href="http://docs.oracle.com/javase/8/docs/api/javax/net/ssl/SSLEngine.html#setNeedClientAuth-boolean-">needs</a> or <a href="http://docs.oracle.com/javase/8/docs/api/javax/net/ssl/SSLEngine.html#setWantClientAuth-boolean-">wants</a> client certificates, do it in <a href="../../javadoc/bayou/http/HttpServerConf.html#sslEngineConf-bayou.util.function.ConsumerX-" class=api><code>sslEngineConf</code></a>.</p>
+<pre>
+server.conf().sslEngineConf(engine -&gt;
+        engine.setWantClientAuth(true)
+);
+</pre>
+<p>In <code>HttpHandler</code>, the client certificate chain is available at <a href="../../javadoc/bayou/http/HttpRequest.html#certs--" class=api><code>HttpRequest.certs()</code></a>.</p>
+
+<h3>Trusting client certificates</h3>
+
+<p>By default, client certificates must be signed by root CAs shipped with JVM, typically stored in <em>trust store</em> <code>JAVA-HOME/lib/security/cacerts</code>.</p>
+<p>The server may want to specify a different <a href="../../javadoc/bayou/ssl/SslConf.html#trustStoreFile-java.lang.String-" class=api><code>trustStoreFile</code></a> for validating client certificates. The trust store may contain a different CA (possibly operated by the server's organization), or it may directly contain individual client certificates.</p>
+<pre>
+server.conf().sslContext( new SslConf()
+        .keyStoreFile(&quot;./server-certs.jks&quot;)
+        .keyStorePass(PASSWORD)
+        .trustStoreFile(&quot;./client-certs.jks&quot;)  // trust store for client certs
+        .createContext()
+);
+</pre>
+<p>The server may also choose to accept all client certificates, including all self-signed ones; by <a href="../../javadoc/bayou/ssl/SslConf.html#trustAll--" class=api><code>trustAll()</code></a></p>
+<pre>
+server.conf().sslContext( new SslConf()
+        .keyStoreFile(&quot;./server-certs.jks&quot;)
+        .keyStorePass(PASSWORD)
+        .trustAll()                            // accept all client certs
+        .createContext()
+);
+</pre>
+
+<h2 id=Using_keytool><a href=#Using_keytool>Using keytool</a></h2>
+
+<p>Here are some examples of using Java's <a href="https://docs.oracle.com/javase/8/docs/technotes/tools/unix/keytool.html">keytool</a>.</p>
+
+<h3>Create a self-signed server certificate for <code>localhost</code></h3>
+
+<pre>
+&gt; keytool -genkeypair -alias localhost -keyalg RSA -validity 10000 -keystore localhost.jks -storepass password
+
+What is your first and last name?
+  [Unknown]:  localhost
+</pre>
+<p>The certificate is stored in file <code>localhost.jks</code>, with password <code>password</code>. To review it,</p>
+<pre>
+&gt; keytool -list -v -keystore localhost.jks -storepass password
+</pre>
+<p>To export the certificate to <code>localhost.cer</code></p>
+<pre>
+&gt; keytool -exportcert -alias localhost -file localhost.cer -keystore localhost.jks -storepass password
+</pre>
+
+<h3>Create a server certificate for multiple domains</h3>
+
+<p>To create a server certificate valid for server domain <code>red.local</code>, <code>blue.local</code>, and server IP <code>127.0.0.1</code></p>
+<pre>
+&gt; keytool -genkeypair -alias color -keyalg RSA -validity 10000 -keystore colors.jks -storepass password -ext SAN=DNS:red.local,DNS:blue.local,IP:127.0.0.1
+</pre>
+
+<h3>Client certificates</h3>
+
+<p>To generate a public-private key pair for client "Jane"</p>
+<pre>
+&gt; keytool -genkeypair -alias jane -keyalg RSA -validity 10000 -storetype pkcs12 -keystore jane.p12 -storepass password
+</pre>
+<p>The client needs to import file <code>jane.p12</code> to her browser.</p>
+<p>To export the certificate to <code>jane.cer</code></p>
+<pre>
+&gt; keytool -exportcert -alias jane -file jane.cer -storetype pkcs12 -keystore jane.p12 -storepass password
+</pre>
+<p>The server can import <code>jane.cer</code> to its trust store <code>client-certs.jks</code></p>
+<pre>
+&gt; keytool -importcert -alias jane -file jane.cer -keystore client-certs.jks -storepass password
+</pre>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/release/0.9/docs/http/Server_SSL_Configuration.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:12:39 GMT -->
+</html>

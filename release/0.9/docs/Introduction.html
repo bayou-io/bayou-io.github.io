@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/release/0.9/docs/Introduction.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:12:34 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Introduction</title>
+		<link rel="stylesheet" type="text/css" href="../../../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../../../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../../../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../../../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../../1.0/docs/index.html">Docs</a><a href="../../../code.html">Code</a><a href="../../../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="index.html">Docs</a> &gt; <a href="Introduction.html">Introduction</a></p>
+
+<h1>Introduction</h1>
+
+<p><code>bayou.io</code> is a set of APIs and utilities for Java web development.</p>
+<p>Currently we have HTTP server, HTTP client, HTML builder, WebSocket server, and Async API.</p>
+<p>The following is a tutorial of features. See <a href="../../1.0/docs/index.html">Docs</a> for detailed subjects.</p>
+
+<h2 id=HttpServer_-_Hello_World><a href=#HttpServer_-_Hello_World>HttpServer - Hello World</a></h2>
+
+<p><a href="../javadoc/bayou/http/HttpServer.html" class=api><code>HttpServer</code></a> is an embedded, asynchronous HTTP server.</p>
+<p><code>HttpServer</code> requires an <a href="../javadoc/bayou/http/HttpHandler.html" class=api><code>HttpHandler</code></a> which accepts <a href="../javadoc/bayou/http/HttpRequest.html" class=api><code>HttpRequest</code></a> and generates <a href="../javadoc/bayou/http/HttpResponse.html" class=api><code>HttpResponse</code></a>.</p>
+<pre>
+public class MyHandler implements HttpHandler
+{
+    @Override
+    public Async&lt;HttpResponse&gt; handle(HttpRequest request)
+    {
+        return HttpResponse.text(200, &quot;Hello World&quot;);
+    }
+</pre>
+<p>Create and start an <code>HttpServer</code> with the handler:</p>
+<pre>
+    public static void main(String... args) throws Exception
+    {
+        HttpHandler handler = new MyHandler();
+
+        HttpServer server = new HttpServer(handler);
+        server.conf().trafficDump(System.out::print);
+        server.start();
+    }
+</pre>
+<p>and we have a server running at <a href="http://localhost:8080/">http://localhost:8080</a>.</p>
+
+<h2 id=Hot_Reload><a href=#Hot_Reload>Hot Reload</a></h2>
+
+<p>Before trying more examples, let's enable hot-reload to reduce turnaround time.</p>
+<p>Wrap the <code>handler</code> with <a href="../javadoc/bayou/http/HotHttpHandler.html" class=api><code>HotHttpHandler</code></a>, and start the server again:</p>
+<pre>
+        // HttpHandler handler = new MyHandler();
+        HotHttpHandler handler = new HotHttpHandler(MyHandler.class).onJavaFiles(SRC_DIR);
+</pre>
+<p>The "hot" handler will monitor source file changes, and reload <code>MyHandler</code> when needed.</p>
+<p>Now we don't need to restart the server after code change. Just save the source file and refresh the browser window.</p>
+
+<h2 id=Async><a href=#Async>Async</a></h2>
+
+<p>Note that <code>HttpHandler</code> returns <code>Async&lt;HttpResponse&gt;</code>. <a href="../javadoc/bayou/async/Async.html" class=api><code>Async&lt;T&gt;</code></a> represents an async action which may not have completed yet. See <a href="async/Async_Programming.html">Async Programming</a>.</p>
+<p>As an example, let's add 1 second delay to our responses</p>
+<pre>
+    public Async&lt;HttpResponse&gt; handle(HttpRequest request)
+    {
+        Async&lt;Void&gt; delay = Fiber.sleep( Duration.ofSeconds(1) );
+        return delay.then(v -&gt;
+            HttpResponse.text(200, &quot;Hello World\n&quot;+ Instant.now()));
+    }
+</pre>
+
+<h2 id=Serving_a_File><a href=#Serving_a_File>Serving a File</a></h2>
+
+<p>To serve an arbitrary file, use <a href="../javadoc/bayou/http/HttpResponse.html#file-int-java.lang.String-" class=api><code>HttpResponse.file()</code></a></p>
+<pre>
+    public Async&lt;HttpResponse&gt; handle(HttpRequest request)
+    {
+        switch(request.uriPath()) // simplistic routing
+        {
+            case &quot;/&quot;:
+                return HttpResponse.html(200, &quot;&lt;video src=&#39;/test.mp4&#39; controls&gt;&quot;);
+
+            case &quot;/test.mp4&quot;:
+                return HttpResponse.file(200, &quot;/tmp/189913.mp4&quot;);
+
+            default:
+                return HttpResponse.file(404, &quot;./404.html&quot;);
+        }
+    }
+</pre>
+
+<h2 id=Manipulating_Responses><a href=#Manipulating_Responses>Manipulating Responses</a></h2>
+
+<p><code>HttpResponse</code> objects can be inspected, transformed, cached, and shared.</p>
+<pre>
+public class MyHandler implements HttpHandler
+{
+    final Async&lt;HttpResponse&gt; stockResponse
+            = HttpResponse.file(200, &quot;/tmp/big.txt&quot;)
+                          .then(HttpResponse::gzip)    // compress
+                          .then(HttpResponse::cache);  // cache in memory
+
+    public Async&lt;HttpResponse&gt; handle(HttpRequest request)
+    {
+        switch(request.uriPath())
+        {
+            case &quot;/test.txt&quot;:
+                return stockResponse;
+</pre>
+
+<h2 id=Serving_Static_Files><a href=#Serving_Static_Files>Serving Static Files</a></h2>
+
+<p>A <a href="../javadoc/bayou/file/StaticHandler.html" class=api><code>StaticHandler</code></a> maps a URI prefix to a directory prefix. It can be used to create a static-only file server.</p>
+<pre>
+    HttpHandler handler = new StaticHandler(&quot;/&quot;, ROOT_DIR);
+    HttpServer server = new HttpServer(handler);
+    server.conf().port(8081);
+    server.start();
+</pre>
+<p>More often though, a <code>StaticHandler</code> is used by a parent handler that serves both static and dynamic contents:</p>
+<pre>
+public class MyHandler implements HttpHandler
+{
+    final StaticHandler staticHandler = new StaticHandler(&quot;/&quot;, ROOT_DIR);
+
+    @Override
+    public Async&lt;HttpResponse&gt; handle(HttpRequest request)
+    {
+        // try static files first
+        HttpResponseImpl resp = staticHandler.handle(request);
+        if(resp.statusCode()!=404) // 200, or error
+             return resp;
+
+        // 404 from staticHandler, request is not mapped to a static file.
+        switch(request.uriPath())
+            ...
+    }
+</pre>
+<p>The static files can be configured individually for headers, caching, etc.</p>
+
+<h2 id=Tagged_URI><a href=#Tagged_URI>Tagged URI</a></h2>
+
+<p><code>StaticHandler</code> supports <em>tagged URI</em> - URI with resource ETag embedded in it. The response to a tagged URI never expires and can be cached forever. This is good for resources like <code>css</code>, <code>js</code>, <code>favicon</code>, etc. (See the <code>&lt;head&gt;</code> section of this page.)</p>
+<p>In the following example, <code>/test.html</code> references an image through its tagged URI:</p>
+<pre>
+            case &quot;/test.html&quot;:
+
+                String imgUri = staticHandler.uri(&quot;img/foo.gif&quot;);
+                //e.g. imgUri = &quot;/img/foo.gif?t-53486116-314fb010&quot;
+
+                String html = String.format(&quot;&lt;img src=&#39;%s&#39;&gt; %s&quot;, imgUri, imgUri);
+                return HttpResponse.html(200, html);
+</pre>
+<p>Revisiting <a href="http://localhost:8080/test.html">http://localhost:8080/test.html</a> will not trigger a new request to the image, unless the image file is modified.</p>
+
+<h2 id=Html_Builder><a href=#Html_Builder>Html Builder</a></h2>
+
+<p>Html Builder is a set of Java APIs for building html trees. For example, to build an <a href="../javadoc/bayou/html/Html5Doc.html" class=api><code>Html5Doc</code></a></p>
+<pre>
+public class HelloHtml extends Html5Doc
+{
+    public HelloHtml(String name)
+    {
+        _head(
+            _link().rel(&quot;stylesheet&quot;).type(&quot;text/css&quot;).href(&quot;/main.css&quot;),
+            _title(&quot;Hello&quot;)
+        );
+
+        _body(() -&gt;
+        {
+            if(name==null)
+                _p(&quot;Hello, whoever you are.&quot;);
+            else
+                _form().action(&quot;/q&quot;).add(
+                    &quot;Hello &quot;, _input().readonly(true).value(name)
+                );
+        });
+    }
+}
+
+// http handler ...
+
+        case &quot;/hello.html&quot;:
+            String name = request.uriParam(&quot;name&quot;);
+            HtmlDoc html = new HelloHtml(name);
+            return html.toResponse(200);
+</pre>
+<p>This will generate an html response, something like</p>
+<pre>
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+    &lt;head&gt;
+        &lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;/main.css&quot;&gt;
+        &lt;title&gt;Hello&lt;/title&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+        &lt;form action=&quot;/q&quot;&gt;
+            Hello &lt;input readonly value=&quot;world&quot;&gt;
+        &lt;/form&gt;
+    &lt;/body&gt;
+&lt;/html&gt;
+</pre>
+<p>An html tree can be built and modified in flexible ways. For example, we can add an element to <code>&lt;head&gt;</code> much later in the code. It's also easy to design template hierarchy, reusable routines, and custom components.</p>
+
+<h2 id=CookieJar><a href=#CookieJar>CookieJar</a></h2>
+
+<p>User cookies can be managed as a mutable, map-like data structure by <a href="../javadoc/bayou/http/CookieJar.html" class=api><code>CookieJar</code></a></p>
+<pre>
+CookieJar cookieJar = CookieJar.current();  // fiber-local
+
+String foo = cookieJar.get(&quot;foo&quot;);
+if(foo==null)
+    cookieJar.put(&quot;foo&quot;, foo=&quot;bar&quot;, Cookie.SESSION);
+
+String flashMsg = CookieJar.current().remove(&quot;flashMsg&quot;);
+</pre>
+
+<h2 id=Form_Handling><a href=#Form_Handling>Form Handling</a></h2>
+
+<p>In this demonstration, we use Html Builder to construct a web form, which, when submitted, is parsed into a <a href="../javadoc/bayou/form/FormData.html" class=api><code>FormData</code></a></p>
+<pre>
+public class FormHtml extends Html5Doc
+{
+    public FormHtml()
+    {
+        _body(
+            _form().method(&quot;POST&quot;).action(&quot;/post&quot;).enctype(FormData.ENC_MULTIPART).add(
+                CsrfToken._input(),  // hidden input for csrf token
+                _input().name(&quot;s1&quot;), _br(),
+                _input().name(&quot;f1&quot;).type(&quot;file&quot;), _br(),
+                _button(&quot;upload&quot;)
+            )
+        );
+    }
+}
+
+// http handler ...
+
+    if(!request.method().equals(&quot;POST&quot;))        // GET or HEAD
+        return new FormHtml().toResponse(200);  // display the form
+
+    return FormData.parse(request)           // Async&lt;FormData&gt;
+        .timeout( Duration.ofSeconds(20) )   // max upload time
+        .then( fd -&gt;                         // FormData -&gt; HttpResponse
+        {
+            String result = fd.param(&quot;s1&quot;) + &quot;\n&quot; + fd.file(&quot;f1&quot;);
+            //fd.deleteFiles();
+            return HttpResponse.text(200, result);
+        })
+        .catch_(CsrfException.class, e -&gt;
+                HttpResponse.text(403, &quot;Cookie disabled?&quot;)
+        )
+        .catch_(Exception.class, e -&gt;
+                HttpResponse.text(400, &quot;Try again.&quot;)
+        );
+</pre>
+
+<h2 id=HttpClient><a href=#HttpClient>HttpClient</a></h2>
+
+<p>Use <a href="../javadoc/bayou/http/HttpClient.html" class=api><code>HttpClient</code></a> to send requests and receive responses.</p>
+<pre>
+HttpClient client = new HttpClient();
+Async&lt;HttpResponse&gt; asyncRes = client.doGet( &quot;https://example.com&quot; );
+</pre>
+<p><code>HttpClient</code> can be used in <code>HttpHandler</code>. For example, to create a simple HTTP proxy:</p>
+<pre>
+HttpServer proxy = new HttpServer( request -&gt;
+    client.send0(request, null)
+);
+</pre>
+
+<h2 id=WebSocketServer><a href=#WebSocketServer>WebSocketServer</a></h2>
+
+<p>A <a href="../javadoc/bayou/websocket/WebSocketHandler.html" class=api><code>WebSocketHandler</code></a> handles WebSocket handshakes</p>
+<pre>
+public class MyWsHandler implements WebSocketHandler
+{
+    @Override
+    public Async&lt;WebSocketResponse&gt; handle(WebSocketRequest request)
+    {
+        // note: same-origin has already been enforced (default configuration)
+
+        if( isBanned(request.ip()) )
+            return WebSocketResponse.reject(403, &quot;permission denied&quot;);
+        else
+            return WebSocketResponse.accept( this::handleChannel );
+    }
+
+    Async&lt;Void&gt; handleChannel(WebSocketChannel channel)
+    {
+        // work with the channel after a successful handshake
+    }
+}
+</pre>
+<p>Create a <a href="../javadoc/bayou/websocket/WebSocketServer.html" class=api><code>WebSocketServer</code></a> with the handler, and attach it to an existing http server:</p>
+<pre>
+public static void main(String[] args) throws Exception
+{
+    HttpServer httpServer = new HttpServer( req-&gt;HttpResponse.file(200, &quot;/tmp/ws.test.html&quot;) );
+    httpServer.conf().trafficDump( System.out::print );
+
+    WebSocketServer wsServer = new WebSocketServer( httpServer, new MyWsHandler() );
+    wsServer.conf().trafficDump( System.err::print );
+
+    httpServer.start();
+}
+</pre>
+<p>A <a href="../javadoc/bayou/websocket/WebSocketChannel.html" class=api><code>WebSocketChannel</code></a> contains methods to read/write <a href="../javadoc/bayou/websocket/WebSocketMessage.html" class=api><code>WebSocketMessage</code></a>. Example of a simple echo server:</p>
+<pre>
+    Async&lt;Void&gt; handleChannel(WebSocketChannel channel)
+    {
+        return AsyncIterator
+            .forEach_( channel::readMessage, channel::writeMessage )
+            .finally_( channel::close );
+    }
+</pre>
+
+<h2 id=Conclusion><a href=#Conclusion>Conclusion</a></h2>
+
+<p><code>bayou.io</code> presents exciting new ways of modeling and building web applications.</p>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/release/0.9/docs/Introduction.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:12:37 GMT -->
+</html>

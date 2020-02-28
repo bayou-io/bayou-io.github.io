@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/release/1.0/docs/html/Code_Organization.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:09:46 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Code Organization</title>
+		<link rel="stylesheet" type="text/css" href="../../../../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../../../../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../../../../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../../../../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../index.html">Docs</a><a href="../../../../code.html">Code</a><a href="../../../../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="../index.html">Docs</a> &gt; <a href="Html_Builder.html">Html Builder</a> &gt; <a href="Code_Organization.html">Code Organization</a></p>
+
+<h1>Code Organization</h1>
+
+
+<h2 id=Document_Class><a href=#Document_Class>Document Class</a></h2>
+
+<p>Each html document should be a subclass of <a href="../../javadoc/bayou/html/Html4Doc.html" class=api><code>Html4Doc</code></a> or <a href="../../javadoc/bayou/html/Html5Doc.html" class=api><code>Html5Doc</code></a>. In simple cases (e.g. throwaway code) you may use anonymous class</p>
+<pre>
+Html5Doc doc = new Html5Doc()  // anonymous class
+{{                             // instance initializer
+        _head(
+            _link().type(&quot;text/css&quot;).href(&quot;/site.css&quot;)
+        );
+
+        _body(()-&gt;
+        {
+            _p(&quot;hello, &quot;, name);
+        });
+}};
+</pre>
+<p>However, it's generally better to declare an explicit class for the document. Parameters can be passed to the constructor. The document should be built complete upon constructor exit.</p>
+<pre>
+public class HelloHtml extends Html5Doc
+{
+    public HelloHtml(String name)
+    {
+        _head(
+            _link().type(&quot;text/css&quot;).href(&quot;/site.css&quot;)
+        );
+
+        _body(()-&gt;
+        {
+            _p(&quot;hello, &quot;, name);
+        });
+    }
+}
+
+// HttpHandler
+    return new HelloHtml(&quot;world&quot;).toResponse(200);
+</pre>
+
+<h2 id=Template_Class><a href=#Template_Class>Template Class</a></h2>
+
+<p>App can establish a hierarchy of html templates. A template class creates a document with some blank areas, to be filled by subclasses. A template class can also define some convenience methods for subclasses to use.</p>
+<pre>
+public class TemplateHtml extends Html5Doc
+{
+    protected DIV mainArea;
+
+    public TemplateHtml(String title)
+    {
+        _head(
+            _title(title),
+            _link().type(&quot;text/css&quot;).href(&quot;/site.css&quot;)
+        );
+
+        _body(()-&gt;
+        {
+            _h1(title);
+            mainArea = _div().id(&quot;main&quot;); // to be filled by subclass constructor
+        });
+    }
+    // convenience methods.
+    public A _url(String url) // don&#39;t overload super methods like _a(), _link()
+    {
+        return _a(url).href(url);
+    }
+    public void addCss(String cssFile)
+    {
+        head.add( _link().type(&quot;text/css&quot;).href(cssFile) );
+    }
+}
+
+public class ByeHtml extends TemplateHtml
+{
+    public ByeHtml(String name)
+    {
+        super(&quot;good bye &quot;+name);
+
+        mainArea.add(
+            _p(&quot;nice to meet you, &quot;, name),
+            _p(&quot;see you at &quot;, _url(&quot;http://example.com&quot;))
+        );
+
+        addCss(&quot;/bye.css&quot;);
+    }
+}
+</pre>
+<p>Do not design a template class as an abstract class with abstract methods - it's not safe to invoke abstract methods in constructors.</p>
+
+<h2 id=Use_Sub-routines><a href=#Use_Sub-routines>Use Sub-routines</a></h2>
+
+<p>When building a complex html, nesting can become too deep and unmanageable, for example,</p>
+<pre>
+    _body(()-&gt;{
+        _div(
+            _form(()-&gt;{
+                _p().add(
+                    _span(
+                        _a(
+                            ...
+</pre>
+<p>You can reorganize it into sub-routines, keep each one at reasonable length.</p>
+<pre>
+public QueryHtml()
+{
+    _body(() -&gt;
+    {
+        _div().id(&quot;d1&quot;).add(this::prologue);
+
+        _div().add(
+            _queryForm().id(&quot;form&quot;),
+            _p(&quot;fine prints&quot;)
+        );
+
+        footer();
+    });
+}
+void prologue() // code block
+{
+    _p().id(&quot;p1&quot;).add(&quot;Lorem ipsum dolor sit amet&quot;);
+    _p().id(&quot;p2&quot;).add(&quot;Ut enim ad minim veniam&quot;);
+}
+void footer()
+{
+    _hr();
+    _p(&quot;Duis aute irure dolor in reprehenderit&quot;);
+}
+FORM _queryForm() // custom builder method
+{
+    return _form().action(&quot;/query&quot;).add(
+        _input().name(&quot;q&quot;),
+        _mySelect(&quot;category&quot;, &quot;apple&quot;, &quot;orange&quot;),
+        _input().type(&quot;submit&quot;)
+    );
+}
+SELECT _mySelect(String name, String... options) // don&#39;t overload super&#39;s _select() method
+{
+    SELECT select = _select().name(name);
+    for(String opt : options)
+        select.add( _option(opt) );
+    return select;
+}
+</pre>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/release/1.0/docs/html/Code_Organization.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:09:46 GMT -->
+</html>

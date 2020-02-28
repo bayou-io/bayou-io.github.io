@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/release/1.0/docs/html/Custom_Builder.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:09:46 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Custom Builder</title>
+		<link rel="stylesheet" type="text/css" href="../../../../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../../../../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../../../../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../../../../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../index.html">Docs</a><a href="../../../../code.html">Code</a><a href="../../../../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="../index.html">Docs</a> &gt; <a href="Html_Builder.html">Html Builder</a> &gt; <a href="Custom_Builder.html">Custom Builder</a></p>
+
+<h1>Custom Builder</h1>
+
+
+<h2 id=HtmlPiece><a href=#HtmlPiece>HtmlPiece</a></h2>
+
+<p><a href="../../javadoc/bayou/html/HtmlPiece.html" class=api><code>HtmlPiece</code></a> is the most basic type for html builders. An html document is a tree of <code>HtmlPiece</code> nodes.</p>
+<p>The <code>HtmlPiece</code> interface has a single abstract method <a href="../../javadoc/bayou/html/HtmlPiece.html#render-int-java.util.function.Consumer-" class=api><code>render(indent, out)</code></a> which renders the piece as a sequence of chars as the piece would appear in an HTML document.</p>
+
+<h2 id=Builder_Interface><a href=#Builder_Interface>Builder Interface</a></h2>
+
+<p>An html builder interface contains nested subtypes of <code>HtmlPiece</code>, and builder methods that build such pieces. The builder methods should be <code>default</code> methods; the interface should have no abstract methods. App can access members of the interface simply by inheritance.</p>
+<p>For example, the standard builder <a href="../../javadoc/bayou/html/Html5.html" class=api><code>Html5</code></a> contains element types like <a href="../../javadoc/bayou/html/Html5.DIV.html" class=api><code>Html5.DIV</code></a> and builder methods like <a href="../../javadoc/bayou/html/Html5.html#Z:Z_div--" class=api><code>Html5._div()</code></a>. Subclasses of <a href="../../javadoc/bayou/html/Html5Doc.html" class=api><code>Html5Doc</code></a> (which <code>implements Html5</code>) access <code>DIV</code> and <code>_div()</code> through inheritance .</p>
+<p>A custom builder interface follows the same pattern, for example</p>
+<pre>
+import static bayou.html.Html5.*;
+
+public interface HtmlMisc
+{
+    public static final HtmlMisc misc = new HtmlMisc(){};
+
+    default public A _url(String url) // do not use stand element names like _a(), _link()
+    {
+        return html5._a(url).href(url);
+    }
+</pre>
+<p>This builder can be reused by different projects and teams. User code simply <code>extends/implements HtmlMisc</code> to access its members.</p>
+<p>An instance of <code>HtmlMisc</code> is also provided (as <code>HtmlMisc.misc</code>) in case inheritance is not suitable in some situations. Actually here in the body of <code>_url()</code> method, we access <code>Html5</code> builder methods through the <a href="../../javadoc/bayou/html/Html5.html#html5" class=api><code>Html5.html5</code></a> instance.</p>
+<p>You may also consider static builder methods, if that's more convenient; e.g. <a href="../../javadoc/bayou/form/CsrfToken.html#Z:Z_input--" class=api><code>CsrfToken._input()</code></a>.</p>
+<p>The <code>_url()</code> example is just a syntax sugar to build a standard piece. Next, let's try creating some custom pieces.</p>
+
+<h2 id=Custom_Piece><a href=#Custom_Piece>Custom Piece</a></h2>
+
+<p>Let's start with a simple custom piece, <code>Hex</code>, which simply renders an integer in hex format. Not very exciting.</p>
+<pre>
+public interface HtmlMisc
+{
+    ...
+
+    public class Hex implements HtmlPiece
+    {
+        int x;
+        public Hex(int x)
+        {
+            this.x = x;
+        }
+
+        @Override
+        public void render(int indent, Consumer&lt;CharSequence&gt; out)
+        {
+            out.accept(&quot;0x&quot;);
+            out.accept(Integer.toHexString(x));
+        }
+    }
+
+    default public Hex _hex(int x)
+    {
+        return ContextParent.add(new Hex(x));
+    }
+</pre>
+<p>The builder method <code>_hex()</code> creates a <code>Hex</code> piece and adds it to the context parent.</p>
+<pre>
+public class TestHtml extends Html5Doc implements HtmlMisc
+{
+    ...
+        _p(&quot;The value is &quot;, _hex(47806));
+</pre>
+
+<h2 id=A_Bar_Chart_Example><a href=#A_Bar_Chart_Example>A Bar Chart Example</a></h2>
+
+<p>As a more complex example, let's build a bar chart. The chart contains a list of integers; its color can be configured; its caption can contain arbitrary html pieces. The API should look like:</p>
+<pre>
+public class TestDoc extends Html5Doc implements HtmlMisc
+{
+    ...
+        _barChart(100, 150, 200).color(&quot;red&quot;).caption(
+            &quot;Much Data&quot;, _br(),
+            _url(&quot;http://example.com&quot;)
+        );
+</pre>
+<p>We'll need a <code>BarChart</code> class, with a <code>color(String)</code> method, and a <code>caption(Object...)</code> method. It'll be rendered as a list of <code>&lt;div&gt;</code> elements with varying lengths.</p>
+<pre>
+    default public BarChart _barChart(int... data)
+    {
+        return ContextParent.add(new BarChart(data));
+    }
+
+    public class BarChart implements HtmlPiece
+    {
+        int[] data;
+        public BarChart(int... data)
+        {
+            this.data = data;
+        }
+
+        String color=&quot;#777&quot;;
+        public BarChart color(String color)
+        {
+            this.color = color;
+            return this;
+        }
+
+        DIV caption = new DIV().style(&quot;text-align:center&quot;);
+        public BarChart caption(Object... children)
+        {
+            caption.add(children);
+            return this;
+        }
+
+        @Override
+        public void render(int indent, Consumer&lt;CharSequence&gt; out)
+        {
+            DIV div = new DIV().style(&quot;border:1px solid black; width:300px;&quot;);
+            for(int x : data)
+                div.add( new DIV().add(x).style(String.format(
+                    &quot;width:%dpx; background-color:%s; margin:5px;&quot;, x, color)));
+            div.add(caption);
+
+            div.render(indent, out);
+        }
+    }
+</pre>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/release/1.0/docs/html/Custom_Builder.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:09:46 GMT -->
+</html>

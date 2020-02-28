@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/release/0.9/docs/http/Http_Client.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:12:39 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Http Client</title>
+		<link rel="stylesheet" type="text/css" href="../../../../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../../../../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../../../../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../../../../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../../../1.0/docs/index.html">Docs</a><a href="../../../../code.html">Code</a><a href="../../../../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="../index.html">Docs</a> &gt; <a href="Http_Client.html">Http Client</a></p>
+
+<h1>Http Client</h1>
+
+<p>Use <a href="../../javadoc/bayou/http/HttpClient.html" class=api><code>HttpClient</code></a>.<a href="../../javadoc/bayou/http/HttpClient.html#send-bayou.http.HttpRequest-" class=api><code>send()</code></a> to send a request and receive the response (asynchronously):</p>
+<pre>
+    Async&lt;HttpResponse&gt; send(HttpRequest request)
+</pre>
+<p>For example</p>
+<pre>
+HttpClient client = new HttpClient();
+
+HttpRequest request = HttpRequest.toGet(&quot;https://example.com&quot;);
+
+Async&lt;HttpResponse&gt; asyncRes = client.send( request );
+</pre>
+<p>Or use the convenience method <a href="../../javadoc/bayou/http/HttpClient.html#doGet-java.lang.String-" class=api><code>doGet(absoluteUri)</code></a></p>
+<pre>
+Async&lt;HttpResponse&gt; asyncRes = client.doGet( &quot;https://example.com&quot; );
+</pre>
+<p>Features include - <a href="../../javadoc/bayou/http/HttpClientConf.html#proxy-bayou.http.HttpProxy-" class=api><code>proxy</code></a>, <a href="../../javadoc/bayou/http/HttpClientConf.html#userPassSupplier-java.util.function.Function-" class=api><code>authentication</code></a>, <a href="../../javadoc/bayou/http/HttpClientConf.html#cookieStorage-bayou.http.CookieStorage-" class=api><code>cookies</code></a>, etc.</p>
+<p>The <code>HttpClient</code> API is asynchronous, see <a href="../async/Async_Programming.html">Async Programming</a>. To demonstrate:</p>
+<pre>
+Async&lt;String&gt; asyncBody = client
+    .doGet( &quot;https://example.com&quot; )                     // Async&lt;HttpResponse&gt;
+    .peek(response -&gt; out.println(response.status()))
+    .then(response -&gt; response.bodyString(MAX_CHARS))   // Async&lt;String&gt;
+    .peek(System.out::println)
+    .finally_(client::close)
+;
+</pre>
+<p>The response body must be closed to free the underlying connection. In the previous example, the <a href="../../javadoc/bayou/http/HttpResponse.html#bodyString-int-" class=api><code>response.bodyString()</code></a> method will close the body upon completion; <a href="../../javadoc/bayou/http/HttpResponse.html#bodyBytes-int-" class=api><code>bodyBytes()</code></a> would do the same.</p>
+<p>An <code>HttpClient</code> should be <a href="../../javadoc/bayou/http/HttpClient.html#close--" class=api><code>closed</code></a> eventually.</p>
+
+<h2 id=Synchronous_Use><a href=#Synchronous_Use>Synchronous Use</a></h2>
+
+<p>You may not care about <code>Async</code> API; you just want to use <code>HttpClient</code> in a traditional, synchronous way.</p>
+<p>This can be done by the <a href="../../javadoc/bayou/async/Async.html#sync--" class=api><code>sync()</code></a> method on <code>Async</code> actions, for example</p>
+<pre>
+HttpResponse response = client.doGet("https://example.com").<b>sync()</b>;
+System.out.println(response.status());
+
+String body = response.bodyString(MAX_CHARS).<b>sync()</b>;
+System.out.println(body);
+</pre>
+<p>Of course, <code>sync()</code> blocks the current thread, therefore you should not do this in an async environment, like in an <code>HttpHandler</code>.</p>
+
+<h2 id=Form_Submission><a href=#Form_Submission>Form Submission</a></h2>
+
+<p>To submit a form to a server, you can populate a <a href="../../javadoc/bayou/form/FormData.html" class=api><code>FormData</code></a>, then convert it <a href="../../javadoc/bayou/form/FormData.html#toRequest--" class=api><code>toRequest</code></a>:</p>
+<pre>
+FormData form = new FormData(&quot;POST&quot;, &quot;http://localhost:8080/upload&quot;)
+    .param(&quot;title&quot;, &quot;A Kitty&quot;)
+    .file (&quot;image&quot;, &quot;cat.gif&quot;);
+
+HttpRequest request = form.toRequest();
+
+client.send(request);
+</pre>
+
+<h2 id=Configuration><a href=#Configuration>Configuration</a></h2>
+
+<p><code>HttpClient</code> configuration is done by <a href="../../javadoc/bayou/http/HttpClientConf.html" class=api><code>HttpClientConf</code></a>, typically in the builder pattern. For example,</p>
+<pre>
+HttpClient client = new HttpClientConf()
+    .proxy(&quot;127.0.0.1&quot;, 8080)
+    .trafficDump(System.err::print)
+    .newClient();
+</pre>
+<p>See also</p>
+<ul>
+  <li><a href="Client_SSL_Configuration.html">Client SSL Configuration</a></li>
+  <li><a href="Proxy_and_Tunnels.html">Proxy and Tunnels</a></li>
+</ul>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/release/0.9/docs/http/Http_Client.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:12:40 GMT -->
+</html>

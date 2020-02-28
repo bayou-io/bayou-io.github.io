@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/draft/In_Defense_of_Service_Locator.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:11:47 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>In Defense of Service Locator</title>
+		<link rel="stylesheet" type="text/css" href="../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../release/1.0/docs/index.html">Docs</a><a href="../code.html">Code</a><a href="../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="index.html">draft</a></p>
+<style>
+</style>
+
+<h1>In Defense of Service Locator</h1>
+
+<p><em>Zhong Yu, 2015-12-20</em></p>
+<p>The consensus is that <em>Service Locator</em> (SL) is really bad. It's forever associated with the title <em>anti-pattern</em>, in order to warn off naive young minds. And the alternative, <em>Dependency Injection</em> (DI), is superior in every way.</p>
+<p>But in this article, we'll take a closer look at DI and SL, in an attempt to offer some defense for SL.</p>
+<p>We assume the programming language is <em>object-oriented</em> and <em>imperative</em>, but not necessarily <em>statically typed</em>.</p>
+
+<h2 id=Configurable_Dependency><a href=#Configurable_Dependency>Configurable Dependency</a></h2>
+
+<p>Let's say our application has <em>compile-time</em> dependencies <code>A → B → C → ...</code>, that is, the source code of <code>A</code> references type <code>B</code>, and so on. Some of these dependencies are <em>hardcoded</em>, meaning, constructors and static methods are invoked on depended classes. For example, dependency <code>B → C</code> is hardcoded, if <code>B</code> directly instantiates <code>C</code> objects.</p>
+<p>Some dependencies need to be <em>configurable</em>. For example, while <code>C</code> depends on <code>D</code>, we want different kinds of <code>D</code> in different environments. There are various solutions to that problem, among which are SL and DI. In both SL an DI, the solution is framed as such -- <code>C</code> will interact with an <em>object</em> of type <code>D</code>; <code>C</code> does not directly create the object; a configuration phase decides which and how <code>D</code> is created. The difference between SL and DI is -- <em>how does <code>C</code> get the <code>D</code> object?</em></p>
+<p>We call <code>D</code> a <em>service</em> to <code>C</code>. A service does not have to be something heavy; it can be as simple as a boolean flag.</p>
+
+<h2 id=Service_Locator><a href=#Service_Locator>Service Locator</a></h2>
+
+<p><em>How does <code>C</code> get the <code>D</code> object?</em> -- In SL, <code>C</code> looks up <code>D</code> from a "static location".</p>
+<p>The "static location" must be configured first, such that it yields a proper object upon each lookup. We call this <em>binding</em>, which is typically done at application startup. The rest of the application should only read from the location, but not bind.</p>
+<p>The "static location" can be a static variable, a global hash map, a config file, environment variables, etc. However, it is not necessarily a <em>one-per-process</em> concept; the location could be <em>one-per-thread</em> for example. It is "static" in the sense that it is directly accessible anywhere in the code. In this article, we assume it's accessed through a <em>static factory</em> API.</p>
+
+<h2 id=Dependency_Injection><a href=#Dependency_Injection>Dependency Injection</a></h2>
+
+<p><em>How does <code>C</code> get the <code>D</code> object?</em> -- In DI, a <code>D</code> object is passed(injected) to every <code>C</code> object (let's say, through the constructor); the <code>D</code> object is saved in <code>C</code> as an instance variable, to be used later.</p>
+<p>Now the question becomes, <em>who</em> injects <code>D</code> to <code>C</code>? If it's <code>B</code>, we are just shifting the problem to <code>B</code> to get <code>D</code>. Even worse, that would introduce a new dependency <code>B → D</code>. Ideally, <code>B</code> should only care about <code>C</code>'s interface, not the fact that <code>C</code> depends on <code>D</code>. Therefore, <code>B</code> should not invoke <code>C</code>'s constructor. Then, <em>how does <code>B</code> get a <code>C</code> object?</em></p>
+<p>The genius of DI solution is that <code>C</code> is injected to <code>B</code>. Similarly, <code>B</code> is injected to <code>A</code>. <em>It's turtles all the way down</em>.</p>
+<p>Of course, eventually, someone has to actually instantiate and inject all these objects. This is done in a phase we call <strong><em>assembly</em></strong>, typically at application startup. A <code>D</code> object is instantiated; then a <code>C</code> object is instantiated with the <code>D</code>; and so on; finally, an <code>A</code> object is created. After assembly, we kick start "actual work" by invoking methods on the <code>A</code> object.</p>
+<p>We started out by trying to make <code>C → D</code> configurable; we ended up with the solution where <code>B → C</code> is also configurable because we can choose any <code>C</code> for <code>B</code> during assembly. In DI, all service dependencies <em>can</em> be configured, whether or not they <em>need</em> to be. This is celebrated as the soul of DI by evangelists. Let's describe DI again from that perspective.</p>
+
+<h2 id=Dependency_Injection_(2)><a href=#Dependency_Injection_(2)>Dependency Injection (2)</a></h2>
+
+<p><em>Dependency Injection</em> is a design pattern concerning how service dependencies are expressed and established.</p>
+<p><strong>Injection</strong></p>
+<p>Without loss of generality, in this article we <strong>only consider constructor injection</strong>. We say type <code>Y</code> is <em>injected</em> to class <code>X</code>, if the constructor of <code>X</code> accepts a <code>Y</code> argument; <code>X</code> saves the <code>Y</code> in an instance variable, to be used later.</p>
+<p>In DI, a service <em>shall not</em> be directly instantiated in "normal" application code. Instead, if class <code>X</code> wants to use service type <code>Y</code>, <code>Y</code> must be injected to <code>X</code>. (More generally, a <em>factory</em> of <code>Y</code> is injected; we'll discuss that shortly.) <code>X → Y</code> is said to be <em>loosely coupled</em>, in the sense that <code>X</code> is agnostic of how <code>Y</code> is created. DI enforces loose coupling among all service dependencies.</p>
+<p>If a class depends on any services, the class itself is also a service; and so on.</p>
+<p>DI works on instance level. A static method cannot have internal dependencies on services (that are not passed through method parameters). A static method that needs services should be refactored into an instance method..</p>
+<p><strong>Assembly</strong></p>
+<p>There is a special <em>assembly</em> phase, typically at application startup, where all services are instantiated and injected. The goal of the assembly is to create a <em>root</em> service, as the entry point of "actual work". The root service depends on other services, and so on, forming a <em>service graph</em>. The service graph is <em>fixed</em> at assembly; application logic and data flow through this rigid graph. In a sense, it's like assembling a circuit board by wiring prebuilt components; the circuit functions by signals traveling through wires and processed by components. Since the service graph is fixed and known at assembly, it's easier to apply analysis and transformation on the graph, for various reasons.</p>
+<p>The assembly phase doesn't have to be at application startup; it could also be done on a sub-application level. For example, in a web server, we may want to assemble a new handler for every incoming request.</p>
+<p>A DI application tends to have many services. Assembly can be done manually, <em>i.e.</em> by programmers explicitly invoking constructors of services. However, this can be very tedious if there are many services, and hard to maintain when dependencies evolve during development. Most programmers would rather use a <em>DI framework</em> to perform assembly; the central feature of DI frameworks is to provide a more succinct way to define service graphs. <!-- we don't call it "container"; it does not "contain" services. --></p>
+<p><strong>Factory</strong></p>
+<p>The service graph is fixed after assembly, which raises an obvious concern: isn't that too rigid and not dynamic enough? For example, <code>X</code> depends on <code>Y</code>, but injecting a fixed <code>Y</code> object may not be enough -- maybe because different kinds of <code>Y</code> are required based on user inputs; or maybe because the nature of <code>Y</code> dictates that a new instance of <code>Y</code> is needed per use. This concern of dynamism is easily addressed by injecting a <em>factory</em> of <code>Y</code> into <code>X</code>; <code>X</code> will query the factory whenever needed, and the assembly ensures that the factory returns a proper <code>Y</code>. Query may take parameters; parameter values are typically limited to some compile-time constants.</p>
+<p>Conceptually, even with factories, the service graph is still fixed; the <code>X</code> node can be seen as wired to multiple(possibly infinite) <code>Y</code> nodes that are nonetheless pre-determined at the assembly phase.</p>
+<p>Note that injecting an <em>instance</em> is a special case of injecting a <em>factory</em>, because an instance can be seen as a factory of itself.</p>
+<p><strong>Service vs Data</strong></p>
+<p>Not all types are service types. The application must have types that can be instantiated at will, which we can call <em>data</em> types. DI enforces a strict separation between service types and data types. A data type cannot have internal dependencies on services. For example, we cannot have a <code>saveToDb()</code> method on a <code>Person</code> data type, because that would require a database service injected to <code>Person</code>, forcing <code>Person</code> into a service type.</p>
+<p>How do we determine at design time whether a type is a service type or a data type? It is subjective, but usually intuitively obvious. For example, <code>LinkedList</code> is obviously a data type, and <code>Database</code> is obviously a service type. A rule of thumb is that, if a type needs to be mocked in unit tests, it is most likely a service type.</p>
+<p>Strictly speaking, whether a type is a service type can vary on use sites. The type could be injected as service in one place, and instantiated as data in another. For the purpose of this article, it can be seen as two types in two usages.</p>
+
+<h2 id=Indirections><a href=#Indirections>Indirections</a></h2>
+
+<p>As the saying goes, <em>every problem can be solved by another level of indirection... except the problem of too many indirections.</em> Both SL and DI introduce indirections between service consumers and providers; however, DI does it more indirectly than SL.</p>
+<p>SL contains minimum indirections -- a static factory is used for services that need to be configurable. SL is a simple solution to a specific problem. Of course, it might be <em>too</em> simple, not covering enough concerns.</p>
+<p>DI is more sophisticated. It also uses factories: <code>C → D</code> is resolved by <code>C</code> querying a factory of <code>D</code> (note that we consider an <em>instance</em> of <code>D</code> a special case of a <em>factory</em> of <code>D</code>). But DI involves more indirections than SL, because:</p>
+<ul>
+  <li>The factory of <code>D</code> is provided from outside; <code>C</code> does not decide which factory to use.</li>
+  <li>The factory of <code>D</code> is per instance of <code>C</code>; each <code>C</code> may be wired to a different factory.</li>
+  <li>Indirection is required for <em>all</em> services, not just services that <em>need</em> to be configurable.</li>
+  <li>There are a lot of services in a DI application.</li>
+</ul>
+<p>More indirections solve more problems, even problems that don't exist. But indirections do not come free of cost.</p>
+
+<h2 id=DI_Complexity><a href=#DI_Complexity>DI Complexity</a></h2>
+
+<p>DI pattern is more complex for understanding. Nevertheless, the concept of DI is pretty simple once explained; we are more concerned about whether there are complexities in practicing DI.</p>
+<p>The <em>amount of indirections</em> in DI may make application hard to understand. Indirection means code is split and scattered in different places; more indirection makes it more difficult to follow application structure and behavior.</p>
+<p>The <em>form of indirections</em> in DI may impose constraints on application designs --</p>
+<ul>
+  <li>
+  <p>DI requires exclusive control of service instantiations: all instantiations must be done in assembly. This clashes with other patterns, frameworks, libraries, and language constructs (e.g. Java enum) that also need to instantiate objects.</p></li>
+  <li>
+  <p>DI enforces strict separation between service and data types: services are not accessible in data types. This is probably very sensible in general, but it may be a big obstacle in some API structures.</p></li>
+  <li>
+  <p>DI services are only accessible in instance methods, which can be too restrictive. Examples: some APIs may be best formulated as static methods; some services may be needed in static initializers (e.g. per-class logger). DI services may also be difficult to access in other language constructs, e.g. Java interface default methods.</p></li>
+  <li>
+  <p>DI creates a fixed service graph, which application logic and data flow through. While this is conceptually nice in a sense, it may not be the most natural way to model every type of applications.</p></li>
+  <li>
+  <p>Creating the service graph may require that a lot of services are instantiated eagerly, and their classes loaded eagerly. This could become a problem in some applications or some environments.</p></li>
+</ul>
+<p>Additionally, DI frameworks can often become a source of frustration too, due to their magics, complexities, and flaws.</p>
+
+<h2 id=SL_Simplicity><a href=#SL_Simplicity>SL Simplicity</a></h2>
+
+<p>SL is trivial to understand, easy to practice.</p>
+<p>SL hardly imposes any constraints on API structures. Services are easily accessible in any code.</p>
+
+<h2 id=SL_encourages_hardcoded_dependencies><a href=#SL_encourages_hardcoded_dependencies>SL encourages hardcoded dependencies</a></h2>
+
+<p>In DI, it is compulsory that all service dependencies are resolved indirectly. But in SL, indirection is only required for dependencies that <em>need</em> to be configurable. Other dependencies are often left hardcoded.</p>
+<p>We should stress upfront that <strong>SL encourages hardcoded dependencies</strong>, a point probably missed by SL foes.</p>
+<p>In most discussions that compare DI and SL, a single class is studied for the effects of applying DI or SL. But this is not exactly fair to DI. We should compare at the application level. A DI class in a DI application often corresponds to a class in a comparable SL application that has the dependencies hardcoded! Therefore to compare DI and SL in fairness, we also need to compare DI against <em>Hardcoded Dependency</em>.</p>
+
+<h2 id=Unit_Testing><a href=#Unit_Testing>Unit Testing</a></h2>
+
+<p>The most recognized benefit of extensive indirection in DI is probably for unit testing.</p>
+<p>In the popular school of thought on unit testing, when testing a class <code>C</code>, only the code of <code>C</code> should be executed and tested; if there's a service dependency <code>C → D</code>, all interactions between <code>C</code> and <code>D</code> should be intercepted by the unit test. This school of thought is perfectly aligned with DI -- the unit test creates a mock <code>D</code> and injects it to <code>C</code>.</p>
+<p>How does SL fare in this area? If <code>C → D</code> is resolved by SL, it's not much different -- the unit test binds a mock <code>D</code> before testing <code>C</code>. This binding should be confined to this particular unit test; in order to do that, SL API should provide localized binding, for example by using a thread-local registry.</p>
+<p>But remember that SL also encourages hardcoded dependencies. If <code>B → C</code> is hardcoded, <code>B</code> can invoke <code>C</code>'s constructors and static methods. How can the unit test of <code>B</code> mock <code>C</code> if it's hardcoded?</p>
+<p>One way is to restructure <code>B</code> such that majority of its code are testable by mocks; hardcoded references to <code>C</code> are extracted and isolated. Such restructuring may be too complicated and make <code>B</code> hard to understand.</p>
+<p>Another way is to link to a mock definition of <code>C</code> when unit testing <code>B</code>. Even though <code>B → C</code> is hardcoded at compile time, we still have the freedom of switching <code>C</code> at link time. In theory this is always possible, but whether it is practical depends on available tooling. In Java for example, there is <a href="https://github.com/jayway/powermock">PowerMock</a>, which can mock constructors and static methods as easily as instance methods. (We may also use PowerMock to mock SL API if it doesn't provide localized binding.)</p>
+<p>Some programmers may not even subscribe to the aforementioned school of thought on unit testing. When testing <code>B</code>, maybe it's more beneficial to execute <code>C</code>'s code as well; we are more interested in seeing <code>B</code>'s overall effect on <code>D</code>, therefore we only need to mock <code>D</code>, but not <code>C</code>. A purist may object that this is no longer a <em>unit</em> test.</p>
+
+<h2 id=Application_Assembling><a href=#Application_Assembling>Application Assembling</a></h2>
+
+<p>In DI, every service is born configurable, which makes it easy to assemble new applications from existing service classes. Such versatility is more important in a bigger organization with lots of code and coders; preemptive indirections may be wiser.</p>
+<p>In SL, whether a service is configurable is of discretion, based on how the service is used in current fleet of applications, as well as how it might be used in future applications. It's common that a service is hardcoded at first, then later needs to be refactored to become configurable. If the programming language is statically typed, refactoring is typically easy and safe. But in a bigger organization, such refactoring may involve too many applications and developers, and it could be a difficult task.</p>
+<p>It's also possible that a hardcoded service has different versions on different software branches. This becomes more practical with modern version control tools and practices. For example, it's common that one team sees a stand-in version of a class that another team is implementing full-fledged on another branch.</p>
+
+<h2 id=Decoration><a href=#Decoration>Decoration</a></h2>
+
+<p>In DI, since all services are accessed indirectly, we can apply individual decoration on any service, or cross-cutting decorations on multiple services. Decoration is done at the assembly phase, and it's a common feature of DI frameworks.</p>
+<p>We can do the same thing in SL for all services that are accessed through SL API. However, what about services that are hardcoded? One possible response is <em>Aspect Oriented Programming</em>; but introducing AOP to an application may bring in more trouble than it's worth. Another response is to consider the need of decoration as a call for being configurable, therefore any service that may require decorations must be accessed through SL API.</p>
+
+<h2 id=Context><a href=#Context>Context</a></h2>
+
+<p>Dependency injection is <em>per instance</em>. For example, a service graph can contain two instances of <code>C</code>, each injected with a different kind of <code>D</code>. Therefore, <code>C → D</code> is resolved differently based on context. The context is encoded in the service graph.</p>
+<p>Note that while in theory an arbitrarily complex service graph can be created, it may not be an easy thing to do in practice. Using a particular DI framework, it may be impossible or very difficult to define the exact service graph you want.</p>
+<p>In SL, how can <code>C → D</code> be resolved differently based on context? Since it's resolved by looking up on a static factory, we need to pass some contextual information as qualifier of the lookup. The qualifier is determined somewhere at a higher layer where the context is established. The qualifier can be passed down as method parameters, but that may be too ugly or impractical. Another way to pass something down the call stack is through thread-local.</p>
+<p>Actually, SL binding can be thread-local too. At a higher layer where the context is established, we can create a thread-local binding of <code>D</code>, and un-bind it when the context is terminated. <code>C</code> does not know or care about how the binding is established; it simply looks up <code>D</code> without any explicit qualifier (while the thread-ID is an implicit qualifier). This solution is more appealing from <code>C</code>'s point of view, because now it is agnostic of the context.</p>
+
+<h2 id=Dependency_Manifest><a href=#Dependency_Manifest>Dependency Manifest</a></h2>
+
+<p>In SL, dependencies are "hidden", that is, we have to investigate the code of <code>C</code> to discover that it depends on <code>D</code>. Even worse, if we read the code of <code>B</code> which uses <code>C</code>, it is not obvious that <code>B</code> also depends on <code>D</code>, transitively. It's possible that an application using <code>B</code> forgets to bind <code>D</code>, causing runtime errors.</p>
+<p>In DI, dependencies of a class are clearly listed in the constructor signature. Users are forced to supply all dependencies when instantiating the class. That sounds very nice, except... we shall not instantiate services in "normal" application code anyway! Therefore these constructor signatures aren't really useful in application coding.</p>
+<p>We do need to invoke service constructors in DI in two places -- unit test, and assembly.</p>
+<ul>
+  <li>
+  <p>A unit test on a service class is usually not a black box test on its interface, especially if we want to intercept all interactions between the class and its dependencies. Regardless of SL or DI, the unit test needs to investigate the target code and mock every dependencies accordingly. SL is no more likely than DI to forget to set up a dependency mock. Besides, it's not a severe problem if a unit test fails due to incorrect setup.</p></li>
+  <li>
+  <p>The assembly phase invokes service constructors. If assembly is done manually, constructors are called explicitly by the programmer, and constructor signatures are very helpful to prevent mistakes. However, most programmers would rather use a DI framework for assembly. A DI framework typically invokes constructors implicitly, under the hood; the programmer don't explicitly call constructors, therefore constructor signatures don't help much at coding time.</p></li>
+</ul>
+<p>In SL, every service lookup must be matched by a service binding. This seems error prone if there's no mechanism to enforce the matching. In practice though, it doesn't seem to be a real problem. Typically during application development, every time we add a service lookup in application code, we'll simultaneously add a service binding in configuration code, thus maintaining the matching of lookup and binding along the way. Actually, it is probably the same in most DI practices -- adding a new service in application is accompanied by adding a new binding to the DI framework.</p>
+<p>If the programming language is statically typed, we could also write a static analyzer for SL that examine service lookups and bindings to make sure they match. The analyzer needs to look into the code instead of just method signatures, which is a little harder to do. When such static analyzer is nonexistent, we could use the IDE to list all usages of the SL API, and manually verify that every lookup is satisfied by a binding.</p>
+
+<h2 id=Life_Cycle><a href=#Life_Cycle>Life Cycle</a></h2>
+
+<p>In DI, a service can be disposed when the service graph is disposed, at which point some actions can be taken by the service. But this is not specific to DI; it is more about identifying the termination point of a task and take some actions at that point; we can do the same thing in SL.</p>
+<p>Another concept is "scope", which can host some service instances. For example, a service may be "request-scoped", for performance or semantic reasons. When the scope is terminated, the service is disposed. Ideally, use sites of the service do not know or care about its scoping. Once again, this does not seem to be specific to DI or SL; we can scope a service in DI at the assembly phase, and in SL at the binding phase.</p>
+<p>Some service types may require timely and explicit disposal. In SL, we can look up a service, invoke it, then explicitly dispose it. In DI, in order to have a lookup step at the beginning, a <em>factory</em> of the service needs to be injected.</p>
+<!--
+    ## Mixing SL in DI
+
+    In an application that practices DI, sometimes a problem may come up that is difficult
+    to solve in the DI pattern, but easy in SL.
+    It is very tempting to solve the problem with a service locator and call it a day;
+    but it also feels very sinful, corrupting all good principles and forgoing the purity of DI;
+    more terrifyingly, someone may see it and laugh at you.
+
+    It is possible that there is a nice DI solution that you didn't know,
+    so ask around first.
+    But don't assume that such a solution must exist.
+    DI inherently imposes some constraints on application structure;
+    sometimes these constrains will clash with other constraints in the engineering process.
+    Or, the DI framework happens to be inadequate for this particular problem.
+
+    If this article convinces you that SL isn't all that bad,
+    you'll feel less guilty for sneaking SL in a DI application to solve a few tricky problems.
+    You don't need to find another SL library for that; most DI frameworks can be used as SL too.
+-->
+<!--
+    ## Java Woes
+
+    SL has additional obstacles in Java due to two problems of its generic type system --
+    lack of type literal, and type erasure.
+
+    Java has class literals, like `User.class`, which can be used to represent the type `User` at runtime.
+    We can use it in SL like `lookup(User.class)`.
+    But there's no such thing for generic types (e.g. `List<User>`).
+    We'll have to resort to some ugly constructs to simulate generic type literals.
+
+    Type erasure means the runtime value of a type variable is unknowable.
+    Therefore we cannot do a lookup on type `List<T>` if `T` is just a type variable.
+    To work around that we need to pass extra type information through application APIs.
+
+    (Type erasure also prevents simpler API design of SL, like `<T> T lookup()`. That's a minor problem in comparison.)
+
+    These problems are the fault of Java, not SL.
+    But they affect your decision to adopt SL in Java.
+    If, in your application, these problems only come up occasionally, the ugly workarounds can be tolerated,
+    and SL can be favored for its overall simplicity.
+
+    If these problems are too severe in your application, DI may be more appealing.
+    DI pattern is not affected by these Java problems, at least in theory.
+    However, some DI frameworks may not be able to handle all generic use cases satisfactorily.
+-->
+
+<h2 id=Summary><a href=#Summary>Summary</a></h2>
+
+<p>If DI is perfect, there is no reason for SL. We <a href="#DI_Complexity">listed</a> some problems of DI that don't exist in SL.</p>
+<p>Some criticisms of SL do not seem to hold upon closer look, for example, <a href="#Dependency_Manifest">dependency manifest</a>.</p>
+<p>DI involves more indirections, which implies more flexibilities. We discussed how to achieve similar flexibilities in SL.</p>
+<p>--</p>
+<p>Feedback to this article can be posted to <a href="https://groups.google.com/forum/#!forum/od-service-locator">https://groups.google.com/forum/#!forum/od-service-locator</a>.</p>
+<p>See also: <a href="http://zhong-j-yu.github.io/od/"><code>OD</code> -- a simple Service Locator library for Java</a>.</p>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/draft/In_Defense_of_Service_Locator.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:11:47 GMT -->
+</html>

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/release/1.0/docs/http/Tunnel.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:09:45 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Tunnel</title>
+		<link rel="stylesheet" type="text/css" href="../../../../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../../../../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../../../../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../../../../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../index.html">Docs</a><a href="../../../../code.html">Code</a><a href="../../../../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="../index.html">Docs</a> &gt; <a href="Http_Server.html">Http Server</a> &gt; <a href="Tunnel.html">Tunnel</a></p>
+
+<h1>Tunnel</h1>
+
+<p>HttpServer can support the <a href="http://tools.ietf.org/html/rfc7231#section-4.3.6">CONNECT</a> method for establishing tunnels, which is most often used for HTTPS tunneling.</p>
+<p>The CONNECT method is not enabled by default; the application needs to add it to <a href="../../javadoc/bayou/http/HttpServerConf.html#supportedMethods-java.lang.String...-" class=api><code>supportedMethods</code></a> first</p>
+<pre>
+    server.conf().supportedMethods(&quot;CONNECT&quot;, &quot;GET&quot;, &quot;HEAD&quot; ... );
+</pre>
+<p>In the HttpHandler, the application needs to examine each CONNECT request and decide whether to allow the tunneling, based on criteria like client IP, target host:port. The target host:port is specified by <a href="../../javadoc/bayou/http/HttpRequest.html#host--" class=api><code>request.host()</code></a>.</p>
+<p>To grant the tunneling request, return a response with a <code>2xx</code> status code; the server will then establish a tunnel between the client and the target. To deny the tunneling request, return a response with a status code that's not <code>2xx</code>.</p>
+<pre>
+    HttpHandler handler = request-&gt;
+    {
+        if(request.method().equals(&quot;CONNECT&quot;)) // a tunneling request
+        {
+            if(isAllowed(request))
+                return HttpResponse.text(200, &quot;tunneling request granted&quot;);
+            else
+                return HttpResponse.text(403, &quot;tunneling request denied&quot;);
+        }
+
+        ...
+
+    };
+    HttpServer server = new HttpServer(handler);
+</pre>
+<p>See also <a href="https://github.com/zhong-j-yu/bayou/blob/0.9/src/_bayou/_HttpProxy.java">_HttpProxy.java</a> for a simple HTTP+HTTPS proxy demo.</p>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/release/1.0/docs/http/Tunnel.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:09:45 GMT -->
+</html>

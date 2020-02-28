@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/release/0.9/docs/async/Goto_and_Tail_Call.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:10:53 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Goto and Tail Call</title>
+		<link rel="stylesheet" type="text/css" href="../../../../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../../../../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../../../../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../../../../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../../../1.0/docs/index.html">Docs</a><a href="../../../../code.html">Code</a><a href="../../../../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="../index.html">Docs</a> &gt; <a href="Async_Programming.html">Async Programming</a> &gt; <a href="Goto_and_Tail_Call.html">Goto and Tail Call</a></p>
+
+<h1>Goto and Tail Call</h1>
+
+<p>Even though our Async APIs provide some control structures, e.g. sequence and loop, they are not enough to model more complex imperative algorithms.</p>
+<p>One solution is to express algorithms in flowcharts with <code>GOTO</code>s, then program <code>GOTO</code>s as tail calls. See <em>Guy Steele. "Lambda: The Ultimate GOTO"</em>.</p>
+<p>For example, consider this fictitious algorithm in pseudo code</p>
+<pre>
+    int f0(int x)
+    {
+        int y;
+
+    G1:
+        y=f1(x)
+
+    G2:
+        x=f2(y)
+        if(x&lt;y) goto G1
+
+    G3:
+        y=f3(x)
+        if(y&lt;0) goto G2
+
+        return y;
+    }
+</pre>
+<p>Don't mind what it does and how, we just want to convert it to code straightforwardly.</p>
+<p>It can be programmed in ordinary Java code as</p>
+<pre>
+    class F0
+    {
+        // state variables
+        int x;  // init by constructor
+        int y;
+
+        int g1()
+        {
+            y = f1(x);
+            return g2();  // &quot;goto G2&quot;
+        }
+        int g2()
+        {
+            x = f2(y);
+            if(x&lt;y) return g1();
+            return g3();
+        }
+        int g3()
+        {
+            y = f3(x);
+            if(y&lt;0) return g2();
+            return y;
+        }
+    }
+
+    int f0(int x)
+    {
+        return new F0(x).g1();
+    }
+</pre>
+<p>Notice how each <code>GOTO</code> is converted to a tail call.</p>
+<p>This program works, except that it's prone to stack-overflow if recursion becomes too deep, because Java does not support tail call optimization yet.</p>
+
+<h2 id=Async_Version><a href=#Async_Version>Async Version</a></h2>
+
+<p>Now suppose <code>f1, f2, f3</code> are async functions</p>
+<pre>
+    Async&lt;Integer&gt; f1(int x){ ... }
+</pre>
+<p>we can program the flowchart in a similar way in our Async APIs:</p>
+<pre>
+    class F0
+    {
+        int x;
+        int y;
+
+        Async&lt;Integer&gt; g1()
+        {
+            return f1(x).then(v-&gt;
+            {
+                y = v;
+                return g2();    // tail call
+            });
+        }
+        Async&lt;Integer&gt; g2()
+        {
+            return f2(y).then(v-&gt;
+            {
+                x = v;
+                if(x&lt;y) return g1();
+                return g3();
+            });
+        }
+        Async&lt;Integer&gt; g3()
+        {
+            return f3(x).then(v-&gt;
+            {
+                y = v;
+                if(y&lt;0) return g2();
+                return Async.success(y);
+            });
+        }
+    }
+</pre>
+<p>Our Async library performs <em>tail call optimization</em>, therefore this program is safe regardless of depth of recursion.</p>
+
+<h2 id=Async_Tail_Call><a href=#Async_Tail_Call>Async Tail Call</a></h2>
+
+<p>If an async action <code>A1</code> is defined as</p>
+<pre>
+asyncX.then( v -&gt; A2 )
+</pre>
+<p>where <code>A2</code> is another async action, <code>A2</code> is a <em>tail call</em> by <code>A1</code>. The completion of <code>A1</code> is identical to the completion of <code>A2</code> - - at the same time, with the same result. This gives us the opportunity to internally optimize the two actions as one.</p>
+<p>In the previous example, action <code>g2</code> may trigger tail call <code>g1</code> or <code>g3</code>, depending on the execution path.</p>
+<p>Let's see another example: Define async action <code>pause(n)</code> recursively as "sleep 1 second, then <code>pause(n-1)</code>".</p>
+<pre>
+Async&lt;Void&gt; pause(int n)
+{
+    if(n&lt;=0)
+        return Async.VOID;
+
+    return Fiber
+        .sleep(Duration.ofSeconds(1))
+        .then( v -&gt;
+            pause(n-1)   // tail call
+        );
+}
+</pre>
+<p>There's a chain of tail calls <code>pause(n)-&gt;pause(n-1)-&gt;...-&gt;pause(x)</code>, where <code>pause(x)</code> is the one that is currently sleeping. We do <em>tail call optimization</em> to remove intermediary nodes, keeping only <code>pause(n)-&gt;pause(x)</code>, a much shorter chain. Therefore the memory consumption of <code>pause(n)</code> is bounded, no matter how large <code>n</code> is.</p>
+<p>In the following demonstration, <code>forEach()</code> is implemented with tail recursion:</p>
+<pre>
+public static &lt;T&gt; Async&lt;Void&gt; forEach(AsyncIterator&lt;T&gt; iter, ConsumerX&lt;T&gt; action)
+{
+    return forEachR(iter, action)
+        .catch_(End.class, e-&gt;null); // the control exception to end the loop
+}
+
+private static &lt;T&gt; Async&lt;Void&gt; forEachR(AsyncIterator&lt;T&gt; iter, ConsumerX&lt;T&gt; action)
+{
+    return iter.next().map( t -&gt; { action.accept(t); return null; })
+        .then( v -&gt; forEachR(iter, action) );  // tail recursion
+
+    // recursion ends when `iter.next()` or `action.accept()` fails.
+}
+</pre>
+<p>In contrast, the following implementation is <strong>not</strong> tail recursion; it may cause <code>OutOfMemoryError</code>.</p>
+<pre>
+public static &lt;T&gt; Async&lt;Void&gt; forEachX(AsyncIterator&lt;T&gt; iter, ConsumerX&lt;T&gt; action)
+{
+    return iter.next().map( t -&gt; { action.accept(t); return null; })
+        .then( v -&gt; forEachX(iter, action))  // recursion, but not at the tail!
+        .catch_(End.class, end -&gt; null) ;
+}
+</pre>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/release/0.9/docs/async/Goto_and_Tail_Call.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:10:53 GMT -->
+</html>

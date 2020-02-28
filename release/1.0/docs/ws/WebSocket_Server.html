@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/release/1.0/docs/ws/WebSocket_Server.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:09:46 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>WebSocket Server</title>
+		<link rel="stylesheet" type="text/css" href="../../../../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../../../../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../../../../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../../../../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../index.html">Docs</a><a href="../../../../code.html">Code</a><a href="../../../../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="../index.html">Docs</a> &gt; <a href="WebSocket_Server.html">WebSocket Server</a></p>
+
+<h1>WebSocket Server</h1>
+
+<p>A <a href="../../javadoc/bayou/websocket/WebSocketServer.html" class=api><code>WebSocketServer</code></a> needs to be attached to an <a href="../../javadoc/bayou/http/HttpServer.html" class=api><code>HttpServer</code></a>. The <code>WebSocketServer</code> must be created and configured before the <code>HttpServer</code> starts.</p>
+<pre>
+HttpServer httpServer = new HttpServer( req-&gt;HttpResponse.file(200, &quot;/tmp/ws.test.html&quot;) );
+httpServer.conf().trafficDump( System.out::print );
+
+WebSocketHandler wsHandler = new MyWsHandler();
+WebSocketServer wsServer = new WebSocketServer( httpServer, wsHandler );
+wsServer.conf().trafficDump( System.err::print );
+
+httpServer.start();
+</pre>
+<p>See <a href="../../javadoc/bayou/websocket/WebSocketServerConf.html" class=api><code>WebSocketServerConf</code></a> for config options.</p>
+
+<h2 id=Test_Client><a href=#Test_Client>Test Client</a></h2>
+
+<p>You can use this simple client for testing:</p>
+<pre>
+/tmp/ws.test.html
+
+&lt;html&gt;
+    &lt;head&gt;
+        &lt;script type=&quot;text/javascript&quot;&gt;
+            window.onload = function()
+            {
+                ws = new WebSocket(&quot;ws://localhost:8080&quot;);
+                ws.onmessage = function(e){ log(e.data ); };
+                ws.onclose   = function(e){ log(&quot;CLOSE&quot;); };
+                ws.onerror   = function(e){ log(&quot;ERROR&quot;); };
+            };
+            function log(s){ document.getElementById(&quot;log&quot;).innerHTML += s+&quot;\n&quot;; }
+        &lt;/script&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+        &lt;h1&gt;WebSocket Test&lt;/h1&gt;
+
+        &lt;h2&gt;Send:&lt;/h2&gt;
+        &lt;input onkeydown=&quot;if(event.keyCode==13){ws.send(value);value=&#39;&#39;;}&quot;&gt;
+
+        &lt;h2&gt;Received:&lt;/h2&gt;
+        &lt;pre id=&quot;log&quot;&gt;&lt;/pre&gt;
+    &lt;/body&gt;
+&lt;/html&gt;
+</pre>
+
+<h2 id=WebSocketHandler><a href=#WebSocketHandler>WebSocketHandler</a></h2>
+
+<p>Each <code>WebSocketServer</code> contains a <a href="../../javadoc/bayou/websocket/WebSocketHandler.html" class=api><code>WebSocketHandler</code></a> that handles WebSocket handshakes. The <code>WebSocketHandler</code> interface contains a single abstract method</p>
+<pre>
+    Async&lt;WebSocketResponse&gt; handle(WebSocketRequest request)
+</pre>
+<p>For each handshake request, the handler generates either a <a href="../../javadoc/bayou/websocket/WebSocketResponse.Reject.html" class=api><code>Reject</code></a> or an <a href="../../javadoc/bayou/websocket/WebSocketResponse.Accept.html" class=api><code>Accept</code></a> response. For example,</p>
+<pre>
+public class MyWsHandler implements WebSocketHandler
+{
+    @Override
+    public Async&lt;WebSocketResponse&gt; handle(WebSocketRequest request)
+    {
+        if( isBanned(request.ip()) )
+            return WebSocketResponse.reject(403, &quot;permission denied&quot;);
+        else
+            return WebSocketResponse.accept( this::handleChannel );
+    }
+
+    Async&lt;Void&gt; handleChannel(WebSocketChannel channel)
+    {
+        ...
+    }
+}
+</pre>
+<p>Note that in the default configuration, <a href="../../javadoc/bayou/websocket/WebSocketServerConf.html#enforceSameOrigin-boolean-" class=api><code>same-origin is enforced</code></a> by the server before <code>handle()</code> is called.</p>
+<p>If the handshake is accepted, the <a href="../../javadoc/bayou/websocket/WebSocketResponse.Accept.html" class=api><code>Accept</code></a> response specifies a <a href="../../javadoc/bayou/websocket/WebSocketResponse.Accept.html#getChannelHandler--" class=api><code>channelHandler</code></a>. In the example above, the channel handler is <code>this::handleChannel</code>. A new <a href="../../javadoc/bayou/websocket/WebSocketChannel.html" class=api><code>WebSocketChannel</code></a> is created after handshake and fed to the channel handler.</p>
+
+<h2 id=WebSocketChannel><a href=#WebSocketChannel>WebSocketChannel</a></h2>
+
+<p>A <a href="../../javadoc/bayou/websocket/WebSocketChannel.html" class=api><code>WebSocketChannel</code></a> contains methods to read and write <a href="../../javadoc/bayou/websocket/WebSocketMessage.html" class=api><code>WebSocketMessage</code></a>.</p>
+<pre>
+    Async&lt;WebSocketMessage&gt; readMessage();
+
+    Async&lt;Long&gt;  writeMessage(WebSocketMessage message);
+</pre>
+<p>For example, a simple echo server:</p>
+<pre>
+    Async&lt;Void&gt; handleChannel(WebSocketChannel channel)
+    {
+        return AsyncIterator
+            .forEach_( channel::readMessage, channel::writeMessage )
+            .finally_( channel::close );
+    }
+</pre>
+<p>Note that if the client closes the channel gracefully, <code>readMessage()</code> action completes with <a href="../../javadoc/bayou/websocket/WebSocketClose.html" class=api><code>WebSocketClose</code></a> which is a subtype of <a href="../../javadoc/bayou/util/End.html" class=api><code>End</code></a>.</p>
+<p>You may want to use the more convenient methods like <code>readText(max)</code> and <code>writeText(chars)</code></p>
+<pre>
+    Async&lt;Void&gt; handleChannel(WebSocketChannel channel)
+    {
+        AsyncIterator&lt;String&gt; inputs = ()-&gt;channel.readText(1000);
+        return inputs
+            .map( this::process )
+            .forEach_( channel::writeText )
+            .finally_( channel::close );
+    }
+    String process(String input)
+    {
+        switch(input)
+        {
+            case &quot;time&quot; : return Instant.now().toString();
+            case &quot;user&quot; : return System.getProperty(&quot;user.name&quot;);
+            default     : return &quot;pardon?&quot;;
+        }
+    }
+</pre>
+<p>An example of a simple chat server:</p>
+<pre>
+    Async&lt;Void&gt; handleChannel(WebSocketChannel channel)
+    {
+        allChannels.put(channel, &quot;&quot;);
+
+        return AsyncIterator
+            .forEach_( ()-&gt;channel.readText(1000), this::broadcast )
+            .finally_( ()-&gt;allChannels.remove(channel) )
+            .finally_( channel::close );
+    }
+
+    final ConcurrentHashMap&lt;WebSocketChannel,String&gt; allChannels = new ConcurrentHashMap&lt;&gt;();
+
+    Async&lt;Void&gt; broadcast(String msg)
+    {
+        for(WebSocketChannel channel : allChannels.keySet())
+            channel.writeText(msg); // don&#39;t wait for write completion
+        return Async.VOID;
+    }
+</pre>
+
+<h2 id=WebSocketMessage><a href=#WebSocketMessage>WebSocketMessage</a></h2>
+
+<p>A <a href="../../javadoc/bayou/websocket/WebSocketMessage.html" class=api><code>WebSocketMessage</code></a> is a subtype of <a href="../../javadoc/bayou/bytes/ByteSource.html" class=api><code>ByteSource</code></a>. You can read an incoming message in streaming-style:</p>
+<pre>
+Async&lt;WebSocketMessage&gt; asyncMsg = channel.readMessage();
+asyncMsg.then( msg-&gt;
+    AsyncIterator.forEach( msg::read, System.out::println )
+);
+</pre>
+<p>To create an outgoing message, see static methods in <a href="../../javadoc/bayou/websocket/WebSocketMessage.html" class=api><code>WebSocketMessage</code></a>. For example, to send a file</p>
+<pre>
+ByteSource src = new FileByteSource(&quot;/tmp/abc.txt&quot;);
+WebSocketMessage msg = WebSocketMessage.text( src );
+channel.writeMessage( msg );
+</pre>
+
+<h2 id=Hot_Reload><a href=#Hot_Reload>Hot Reload</a></h2>
+
+<p>Use <a href="../../javadoc/bayou/websocket/HotWebSocketHandler.html" class=api><code>HotWebSocketHandler</code></a> to hot-reload the server app when source code changes.</p>
+<p>Usually, a WebSocket app works together with an HTTP app; they share the same code and the same classloader. Therefore we want the two to share the same <a href="../../javadoc/bayou/reload/HotReloader.html" class=api><code>HotReloader</code></a>.</p>
+<pre>
+HotReloader reloader = new HotReloader().onJavaFiles(SRC_DIR);
+
+HotHttpHandler httpHandler = new HotHttpHandler(reloader, MyHttpHandler.class);
+
+HotWebSocketHandler wsHandler = new HotWebSocketHandler(reloader, MyWsHandler.class);
+</pre>
+<p>After reloading, new WebSocket channels will be handled by the new handler instance; previous channels are still being handled by the old handler instance until they are closed. A client needs to reconnect (usually by refreshing browser window) to see the effect of reloading.</p>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/release/1.0/docs/ws/WebSocket_Server.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:09:46 GMT -->
+</html>

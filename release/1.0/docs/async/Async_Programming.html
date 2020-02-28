@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/release/1.0/docs/async/Async_Programming.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:09:44 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Async Programming</title>
+		<link rel="stylesheet" type="text/css" href="../../../../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../../../../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../../../../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../../../../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../index.html">Docs</a><a href="../../../../code.html">Code</a><a href="../../../../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="../index.html">Docs</a> &gt; <a href="Async_Programming.html">Async Programming</a></p>
+
+<h1>Async Programming</h1>
+
+
+<h2 id=Async_Action><a href=#Async_Action>Async Action</a></h2>
+
+<p>In async programming model, methods do not block the current thread. Instead, an async method returns an <a href="../../javadoc/bayou/async/Async.html" class=api><code>Async&lt;Foo&gt;</code></a> object, representing an async action running in the background. An <code>Async&lt;Foo&gt;</code> action eventually completes, either in a success with a <code>Foo</code> value, or in a failure with an <code>Exception</code>. For example</p>
+<pre>
+static Async&lt;Void&gt; fooAction()
+{
+    return Fiber.sleep(Duration.ofSeconds(1));
+}
+</pre>
+<p>Here, <code>Fiber.sleep()</code> does not block the current thread; instead it immediately returns an <code>Async&lt;Void&gt;</code> which will complete after some time.</p>
+<p>You may use <a href="../../javadoc/bayou/async/Async.html#execute-java.util.concurrent.Callable-" class=api><code>Async.execute()</code></a> to convert a legacy blocking action to an async action. For example</p>
+<pre>
+Async&lt;byte[]&gt; read(Path filePath)
+{
+    return Async.execute( ()-&gt; Files.readAllBytes(filePath) );
+}
+</pre>
+
+<h2 id=Fiber><a href=#Fiber>Fiber</a></h2>
+
+<p><a href="../../javadoc/bayou/async/Fiber.html" class=api><code>Fiber</code></a> is an analogue of <code>Thread</code> for async actions. A fiber is responsible for executing an async task and sub-tasks. For example</p>
+<pre>
+static Async&lt;Integer&gt; task() { ... }
+
+public static void main(String[] args)
+{
+    Fiber&lt;?&gt; fiber = new Fiber&lt;&gt;( ()-&gt;task() );
+    fiber.block(); // block the main thread till task completion
+}
+</pre>
+<p><a href="../../javadoc/bayou/async/FiberLocal.html" class=api><code>FiberLocal</code></a> is an analogue of <code>ThreadLocal</code>.</p>
+<p><a href="../../javadoc/bayou/async/Fiber.html#fiber-stack-trace" class=api><code>Fiber stack trace</code></a> can be enabled, which records execution paths of async actions.</p>
+<p>An example usage of Fiber: <a href="../../javadoc/bayou/http/HttpServer.html" class=api><code>HttpServer</code></a> creates a fiber for each http connection. The fiber executes application code that handles http requests from this connection. <code>FiberLocal</code> is used to store the current request. Application can dump all fibers to review the state of connections.</p>
+
+<h2 id=Sequential_Actions><a href=#Sequential_Actions>Sequential Actions</a></h2>
+
+<p>After an action completes, often we want to start a subsequent action, and so on. This can be modeled by <a href="../../javadoc/bayou/async/Async.html#sequential-actions" class=api><code>sequencing methods</code></a> like <a href="../../javadoc/bayou/async/Async.html#map-bayou.util.function.FunctionX-" class=api><code>map()</code></a> and <a href="../../javadoc/bayou/async/Async.html#then-bayou.util.function.FunctionX-" class=api><code>then()</code></a>. For example</p>
+<pre>
+ Async&lt;Integer&gt; action1(){...}
+ Async&lt;String&gt;  action2(Integer x){...}
+
+ Async&lt;String&gt; sequence =
+     action1()
+     .peek( System.out::println )
+     .map ( x-&gt;x*2 )
+     .then( x-&gt;action2(x) ); // then() is &quot;flat map&quot;
+</pre>
+<p>We can also simulate Java's try-catch-finally:</p>
+<pre>
+     .then( x-&gt;action2(x) )
+     .catch_( IOException.class, e-&gt;&quot;default string&quot; )
+     .finally_( resource::close )
+     .then( string-&gt;... )
+</pre>
+
+<h2 id=Iteration_and_Looping><a href=#Iteration_and_Looping>Iteration and Looping</a></h2>
+
+<p><a href="../../javadoc/bayou/async/AsyncIterator.html" class=api><code>AsyncIterator&lt;T&gt;</code></a> is an async analogue of <code>Iterator</code>; it contains a single abstract method</p>
+<pre>
+Async&lt;T&gt; next();
+</pre>
+<p>which yields the next element asynchronously. The returned <code>Async&lt;T&gt;</code> eventually succeeds with a <code>T</code> value as the next element, or fails with an <a href="../../javadoc/bayou/util/End.html" class=api><code>End</code></a> exception to end the iteration.</p>
+<p>For example, an async iterator that yields ten discrete seconds:</p>
+<pre>
+        Instant stop = Instant.now().plusSeconds(10);
+
+        AsyncIterator&lt;Instant&gt; ticks = ()-&gt;
+        {
+            if(Instant.now().isAfter(stop))
+                return End.async();  // end iteration
+
+            return Fiber
+                .sleep(Duration.ofSeconds(1))
+                .map( v -&gt; Instant.now() );
+        };
+</pre>
+<p>An <code>AsyncIterator</code> can be transformed by <code>map(), filter(),</code> etc. to create an iterator of new elements:</p>
+<pre>
+AsyncIterator&lt;String&gt; iter = AsyncIterator.of(1, 2, 3, 4)
+    .filter(x -&gt; x % 2 == 1)
+    .map( String::valueOf );  // map( T -&gt; R )
+
+AsyncIterator&lt;Instant&gt; ticks2 = AsyncIterator.ofInts(0, 10)
+    .map_( i -&gt; Fiber.sleep(Duration.ofSeconds(1)) )     // map_( T -&gt; Async&lt;R&gt; )
+    .map ( v -&gt; Instant.now() );
+</pre>
+<p>Loops involving async actions can often be modeled by an <code>AsyncIterator</code> with a terminal operation like <code>forEach(), reduce()</code>.</p>
+<pre>
+Async&lt;Void&gt; p = iter.forEach(System.out::println);
+</pre>
+<p>Some async APIs are designed to be compatible with <code>AsyncIterator.next()</code>. For example, <a href="../../javadoc/bayou/bytes/ByteSource.html#read--" class=api><code>ByteSource.read()</code></a> returns <code>Async&lt;ByteBuffer&gt;</code>, which either succeeds with the next <code>ByteBuffer</code>, or fails with <code>End</code> for EOF. It's easy to create an async iterator for the data buffers from the source:</p>
+<pre>
+ByteSource source = new FileByteSource(&quot;tmp.txt&quot;);
+
+AsyncIterator&lt;ByteBuffer&gt; bbs = source::read;
+bbs.forEach( this::parse );
+
+// 3 alternative ways:
+( (AsyncIterator&lt;ByteBuffer&gt;)source::read ).forEach( this::parse );
+AsyncIterator.by( source::read ).forEach( this::parse );
+AsyncIterator.forEach( source::read, this::parse );
+</pre>
+
+<h2 id=Parallel_Actions><a href=#Parallel_Actions>Parallel Actions</a></h2>
+
+<p>We can run parallel actions and treat them as one collective action, which completes when all or some of the actions complete. See <a href="../../javadoc/bayou/async/AsyncBundle.html" class=api><code>AsyncBundle</code></a>. In the following example, we query 3 servers simultaneously, and we only need one successful response from any of the servers:</p>
+<pre>
+Async&lt;String&gt; queryServer(int serverId, String term) { ... }
+
+Async&lt;String&gt; queryParallel(String term)
+{
+    Stream&lt;Async&lt;String&gt;&gt; queries = IntStream.range(0, 3)
+        .mapToObj( id -&gt; queryServer(id, term) );
+
+    return AsyncBundle.anyOf( queries );
+}
+</pre>
+
+<h2 id=Async_Args><a href=#Async_Args>Async Args</a></h2>
+
+<p>You may prefer to formulate an algorithm as functions calling functions... all the way down. If an argument to a function is the eventual success value of an async action, try <a href="../../javadoc/bayou/async/Async.html#invoke-bayou.util.function.BiFunctionX-bayou.async.Async-bayou.async.Async-" class=api><code>Async.invoke</code></a></p>
+<pre>
+String func(boolean arg1, int arg2){ ... }
+
+Async&lt;String&gt; x = Async.invoke( this::func, async1(), async2() );
+
+Async&lt;Boolean&gt; async1(){ ... }
+Async&lt;Integer&gt; async2(){ ... }
+</pre>
+<p>Currently <code>Async.invoke</code> supports only arity of 2, as an experiment. If you are interested in this topic, please provide feedback and let's discuss how to design a more general API.</p>
+
+<h2 id=Goto><a href=#Goto>Goto</a></h2>
+
+<p>See <a href="Goto_and_Tail_Call.html">Goto and Tail Call</a> on how to program a flowchart containing async actions.</p>
+
+<h2 id=Cancel_and_Timeout><a href=#Cancel_and_Timeout>Cancel and Timeout</a></h2>
+
+<p>We can send a cancellation request to any async action by <a href="../../javadoc/bayou/async/Async.html#cancel-java.lang.Exception-" class=api><code>action.cancel(reason)</code></a>. If the action has not completed yet, it should abort immediately and fail with <code>reason</code>.</p>
+<p>A common usage is to cancel an action after a certain timeout. This can be done conveniently by <a href="../../javadoc/bayou/async/Async.html#timeout-java.time.Duration-" class=api><code>timeout(duration)</code></a>.</p>
+<pre>
+queryParallel(&quot;kittens&quot;).timeout(Duration.ofSeconds(3))
+    .then( ... )
+</pre>
+
+<h2 id=Promise><a href=#Promise>Promise</a></h2>
+
+<p><a href="../../javadoc/bayou/async/Promise.html" class=api><code>Promise</code></a> is an implementation of <a href="../../javadoc/bayou/async/Async.html" class=api><code>Async</code></a> for result producers. In the following example, we spawn a thread to do some heavy work asynchronously, using a <code>Promise</code> to represent the async action. The promise is eventually completed by calling either <code>succeed(value)</code> or <code>fail(exception)</code>.</p>
+<pre>
+Async&lt;Integer&gt; foo()
+{
+    Promise&lt;Integer&gt; promise = new Promise&lt;&gt;();
+
+    Thread thread = new Thread( ()-&gt;
+    {
+        try
+        {
+            Integer x = someHeavyWork();
+            promise.succeed(x);
+        }
+        catch(Exception e)
+        {
+            promise.fail(e);
+        }
+    });
+    thread.start();
+
+    promise.onCancel( ex-&gt;thread.interrupt() );
+
+    return promise;
+}
+</pre>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/release/1.0/docs/async/Async_Programming.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:09:44 GMT -->
+</html>

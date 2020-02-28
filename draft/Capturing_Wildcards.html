@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/draft/Capturing_Wildcards.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:11:47 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Capturing Wildcards</title>
+		<link rel="stylesheet" type="text/css" href="../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../release/1.0/docs/index.html">Docs</a><a href="../code.html">Code</a><a href="../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="index.html">draft</a></p>
+<style>
+pre {
+    font-family: "Courier New", Courier, monospace;
+}
+code {
+    font-family: "Courier New", Courier, monospace;
+}
+code i {
+    margin: 0 2px 0 0;
+}
+pre i {
+    margin: 0 2px 0 0;
+}
+.tp {
+    color: #b00;
+}
+.st {
+    font-family: "Arial Black", Gadget, sans-serif;
+    font-size: 75%;
+    color: #700;
+}
+h3 {
+    font-weight: 700;
+    margin-top: 20px;
+    display: table;
+    border-bottom: 1px solid #bbb;
+}
+div.toc {
+    display:table;
+    background-color: #f7f7f7;
+    border: 1px solid #aaa;
+    padding: 10px 30px 0 10px;
+}
+div.toc p {
+    font-weight: bold;
+    margin: 0 0 -10px 0;
+}
+</style>
+
+<h1>Capturing Wildcards</h1>
+
+<p><em>Zhong Yu, 2015-09-01</em></p>
+<p><em>Wildcard</em> in Java Generics is quite simple and intuitive. However, it may get confusing and counterintuitive in some cases. This article explains the <em>mechanics</em> of wildcard, so that readers will be able to analyze how wildcard works in any situation.</p>
+<p>In this article, we use the term <strong>wild type</strong> to refer to <em>parameterized type with wildcard arguments</em>, e.g. types like <code><i>Map</i>&lt;?,?&gt;</code>, <code><i>List</i>&lt;? extends Number&gt;</code>. Other types are referred to as <strong>concrete types</strong>, e.g. <code>String</code>, <code>List&lt;Number&gt;</code>. <!-- what about intersection type? JLS#4.3 does not include it in reference types. --> <!-- ignore primitive types, raw types --></p>
+<p>To understand wild types, there are only two basic points. Take <code><i>List</i>&lt;? extends Number&gt;</code> for example,</p>
+<ul>
+  <li>
+  <p><strong>Supertype</strong> -- <code><i>List</i>&lt;? extends Number&gt;</code> is the supertype of every concrete  <code>List&lt;<i>X</i>&gt;</code> where <code><i>X</i></code> is a subtype of <code>Number</code>.  Wild types are primarily used as <u>variable</u> types.</p></li>
+  <li>
+  <p><strong>Capture Conversion</strong> -- If the type of a <u>value</u> is <code><i>List</i>&lt;? extends Number&gt;</code>,  the compiler converts the type to a concrete <code>List&lt;<i>X</i>&gt;</code>, where <code><i>X</i></code> stands for an unknown subtype of <code>Number</code>.</p></li>
+</ul>
+<p>That's it. The rest of the article expands on these two points.</p>
+<div class=toc><p>Contents</p>
+<ul>
+  <li><a href=#Concrete_Type>Concrete Type</a></li>
+  <li><a href=#Wild_Type>Wild Type</a></li>
+  <li><a href=#Capture_Conversion>Capture Conversion</a></li>
+  <li><a href=#Capture_Everywhere>Capture Everywhere</a></li>
+  <li><a href=#Capture_Helper>Capture Helper</a></li>
+  <li><a href=#Bounds>Bounds</a></li>
+  <li><a href=#Subtyping>Subtyping</a></li>
+  <li><a href=#Nested_Wildcards>Nested Wildcards</a></li>
+  <li><a href=#Variance>Variance</a></li>
+  <li><a href=#Wildcard_Hell>Wildcard Hell</a></li>
+  <li><a href=#Links>Links</a></li>
+</ul>
+</div>
+
+
+<h2 id=Concrete_Type><a href=#Concrete_Type>Concrete Type</a></h2>
+
+<p>A generic class or interface can be viewed as a code template -- we can substitute its type-parameters with actual types to generate a concrete class or interface.</p>
+<pre>
+interface List&lt;<span class=tp>T</span>&gt;              <span class=tp>T</span> → Number          interface List&lt;Number&gt;
+{                                                  {
+    int   size();                                      int     size();
+    <span class=tp>T</span>     get(int);                                    Number  get(int);
+    void  add(<span class=tp>T</span>);                                      void    add(Number);
+  ...                                                ...
+</pre>
+<!-- add(T) returns `boolean` actually. we use `void` for better formatting. -->
+<p>The concrete <code>List&lt;Number&gt;</code> is easy to understand and use, just like any non-generic types.</p>
+<p>Such concrete types are mutually exclusive, meaning <code>List&lt;A&gt;</code> and <code>List&lt;B&gt;</code> (<code>A≠B</code>) share no objects . For example, an object cannot be both an instance of <code>List&lt;Number&gt;</code> and <code>List&lt;Integer&gt;</code>. <!-- suppose an object can be Consumer<Object>&Consumer<Number>. it has two consume() methods.
+     it's passed as a Consumer<? super Integer>. capture conversion will be problematic,
+     unclear which method should be resolved for `obj.consume(integer)`
+--></p>
+<p>Every object is an instance of some concrete class type (e.g. <code>ArrayList&lt;Number&gt;</code>), which has concrete super-classes and concrete super-interfaces (e.g. <code>List&lt;Number&gt;</code>).</p>
+<p><em>In this article we do not consider raw types (e.g <code>List</code>); nor are we concerned about type erasure.</em></p>
+
+<h3>Generic method</h3>
+
+<p>A generic method can also be viewed as a code template --</p>
+<pre>
+&lt;<span class=tp>T</span>&gt; List&lt;<span class=tp>T</span>&gt; newList()             <span class=tp>T</span> → Number         &lt;Number&gt; List&lt;Number&gt; newList()
+{                                                    {
+    return new ArrayList&lt;<span class=tp>T</span>&gt;();                           return new ArrayList&lt;Number&gt;();
+}                                                    }
+</pre>
+<p>To invoke a generic method, its type-parameters <em>must</em> be substituted with actual types, either explicitly or by inference</p>
+<pre>
+List&lt;Number&gt; list = this.&lt;Number&gt;newList();
+List&lt;Number&gt; list = this.        newList();  // &lt;Number&gt; is inferred
+</pre>
+
+<h2 id=Wild_Type><a href=#Wild_Type>Wild Type</a></h2>
+
+<p><code>List&lt;Number&gt;</code> is <em>not</em> a supertype of <code>List&lt;Integer&gt;</code>; they are two independent types, best considered as siblings.</p>
+<p>If we want to design a method that adds up a list of numbers, the following method signature won't work very well --</p>
+<pre>
+double sum(List&lt;Number&gt; numberList) // add all numbers as `double`
+</pre>
+<p>This method can only accept <code>List&lt;Number&gt;</code> arguments, but not <code>List&lt;Integer&gt;, List&lt;Double&gt;</code> etc. To fix that problem, we want to declare <code>numberList</code> in a supertype of all of <code>List&lt;Number&gt;, List&lt;Integer&gt;, List&lt;Double&gt;, ...</code></p>
+<p>That is exactly what <strong>wild types</strong> are designed for</p>
+<ul>
+  <li><code><i>List</i>&lt;? extends Number&gt;</code> is the supertype of all <code>List&lt;<i>X</i>&gt;</code> where <code><i>X</i></code> <span class=st>&lt;:</span> <code>Number</code>.</li>
+</ul>
+<p>(The symbol "<span class=st>&lt;:</span>" means "is a subtype of". Note that every type is a subtype of itself, e.g. <code>Number</code> <span class=st>&lt;:</span> <code>Number</code>.)</p>
+<p>By declaring parameter <code>numberList</code> in the wild supertype, the method now can accept various lists --</p>
+<pre>
+double sum(<i>List</i>&lt;? extends Number&gt; numberList)
+</pre>
+<p>For example, we can call this method with a <code>List&lt;Integer&gt;</code> argument, precisely because the argument type is a subtype of the parameter type, i.e. <code>List&lt;Integer&gt;</code> <span class=st>&lt;:</span> <code><i>List</i>&lt;? extends Number&gt;</code>.</p>
+<p>Wild types can be viewed as "horizontal" supertypes, as opposed to "vertical" supertypes through inheritance.</p>
+<p>Wild types are primarily used for declaring types of variables, so that a variable may store objects of various concrete types.</p>
+<p>Wild types are quite different from concrete types. We cannot <code>new</code> a wild type, like <code>new <i>ArrayList</i>&lt;?&gt;()</code>. We cannot inherit from a wild type, like <code>interface MyList extends <i>List</i>&lt;?&gt;</code>. We muse use concrete types in these places.</p>
+<p>Equivalent ways of defining the wild type --</p>
+<ul>
+  <li>
+  <p><code>List&lt;<i>X</i>&gt;</code> <span class=st>&lt;:</span> <code><i>List</i>&lt;? extends Number&gt;</code> iff <code><i>X</i></code> <span class=st>&lt;:</span> <code>Number</code>.</p></li>
+  <li>
+  <p>an object is a <code><i>List</i>&lt;? extends Number&gt;</code> iff the object is a <code>List&lt;<i>X</i>&gt;</code> where <code><i>X</i></code> <span class=st>&lt;:</span> <code>Number</code>.</p></li>
+</ul>
+<p>Notice how we focus on "wild type" instead of <em>wildcard</em>. A <em>wildcard</em> is only a syntactic component in denoting a wild type, it has no meaning on its own. In particular, <strong>a <em>wildcard</em> is not a type</strong>; it cannot be used in substitutions -- it makes no sense to call <code>this.&lt;?&gt;newList()</code>, and it makes no sense to generate a "concrete" <code>List&lt;?&gt;</code> from template <code>List&lt;<span class=tp>T</span>&gt;</code>.</p>
+
+<h2 id=Capture_Conversion><a href=#Capture_Conversion>Capture Conversion</a></h2>
+
+<p>If an object's static type is <code><i>List</i>&lt;? extends Number&gt;</code>, what are the instance methods that we can invoke on the object, and what are the signatures of these methods? We cannot answer that by template substitution with <em>wildcard</em> --</p>
+<pre>
+interface List&lt;?&gt;
+{
+    ?    get(int);   // nonsense
+    void add( ? );   // nonsense
+  ...
+</pre>
+<p>However, we do know that the object must be in a concrete type <code>List&lt;<i>X</i>&gt;</code> where <code><i>X</i></code><span class=st>&lt;:</span><code>Number</code>. At compile time, the exact type of <code><i>X</i></code> is unknown, so we use a type-variable <code><i>X</i></code> to represent it. The concrete type <code>List&lt;<i>X</i>&gt;</code> looks like</p>
+<pre>
+interface List&lt;<i>X</i>&gt;   // <i>X</i> <span class=st>&lt;:</span> Number
+{
+    int  size();
+    <i>X</i>    get(int);
+    void add(<i>X</i>);
+  ...
+</pre>
+<p>It would be easier to handle the object as the concrete <code>List&lt;<i>X</i>&gt;</code> -- and that is exactly what the compiler does, in a process called <strong>capture conversion</strong> -- wherever an object's type is a wild type, it is converted to a concrete type, by replacing each wildcard with a type-variable. By doing that, the compiler only needs to handle objects in concrete types.</p>
+<p>For example, given an object <code>numberList</code> in type <code><i>List</i>&lt;? extends Number&gt;</code>, the compiler converts its type to <code>List&lt;<i>X</i>&gt;</code> where <code><i>X</i></code><span class=st>&lt;:</span><code>Number</code>. Now we know the object has a method <code>&quot;<i>X</i> get(int)&quot;</code>, therefore we can do</p>
+<pre>
+Number number = numberList.get(i); // assign <i>X</i> to Number
+</pre>
+<p>The object also has a method <code>add(<i>X</i>)</code> which can be invoked with an <code><i>X</i></code> argument. A trivial case is <code>add(null)</code>, since <code>null</code> is assignable to any type. A better example would be an <code><i>X</i></code> argument retrieved from <code>get(i)</code>; we'll discuss that later. Note that we cannot call <code>add(number)</code> with a <code>Number</code> argument, since it's not true that <code>Number</code><span class=st>&lt;:</span><code><i>X</i></code>.</p>
+<p>In this article we use "<code><i>X</i></code>" to represent type-variables introduced by capture conversions. Compilers use names like "<code>CAP#1</code>", "<code>capture#1</code>" for those type-variables; we may see these names in compiler messages, for example,</p>
+<pre>
+numberList.add(number); // compile error:  add(capture#1) is not applicable to Number
+</pre>
+
+<h2 id=Capture_Everywhere><a href=#Capture_Everywhere>Capture Everywhere</a></h2>
+
+<p>The compiler applies capture conversion on <strong><em>every</em></strong> expression that yields a value in wild type. <!--
+        in JLS term, an expression may yield a variable, e.g. `obj.field`, `array[i]`;
+           it's either used as a value, or as an assignment target (no capture here).
+        an expression type may also be `void` or primitive.
+
+        JLS defines capture conversion on all types; here we only mention wild types.
+--> <!--
+expressions that yield an object; may contain sub-expressions that yield an object
+    reading a variable - static, instance, local, variable; method parameter variable; array variable arr[i]
+    calling a method   - for all practical purposes, we can say the invocation has a "return variable"
+                         the callee assigns to the variable; the caller reads from the variable.
+    conditional expr   - b?x:y  // it's pretty much like a method invocation
+    casting expr       - (List<?>)obj
+    assignment         - (a=b)
+    //
+    parenthesis expr   - (obj) // won't introduce wild type, since obj is captured first
+    instantiation      - new Foo() // no wild type
+    lambda, method ref - won't introduce wild type; always concrete functional type
+--></p>
+<p>This is very important to understand, so let's exercise with some mind-numbing examples. In the following code, capture conversion is applied on every <u>underlined</u> expression.</p>
+<pre>
+      <i>List</i>&lt;? extends Number&gt; foo(<i>List</i>&lt;? extends Number&gt; numberList)
+      {
+#1       for(Number number : <u>numberList</u>)
+#2           assert <u>numberList</u>.contains(number);
+#3       numberList = <u>numberList</u>;
+#4       return <u>numberList</u>;
+      }
+</pre>
+<ul>
+  <li>
+  <p><code>Line#1</code> -- The type of <code>numberList</code> is capture converted to <code>List&lt;<i>X<sub>1</sub></i>&gt;</code>. It is a subtype of <code>Iterable&lt;<i>X<sub>1</sub></i>&gt;</code>, therefore it can be used in the <code>for</code> statement. Variable <code>number</code> can be declared as <code>Number</code>, because <code><i>X<sub>1</sub></i></code><span class=st>&lt;:</span><code>Number</code>.</p></li>
+  <li>
+  <p><code>Line#2</code> --<code>numberList</code> is converted to <code>List&lt;<i>X<sub>2</sub></i>&gt;</code>. The compiler searches <code>contains()</code> method in <code>List&lt;<i>X<sub>2</sub></i>&gt;</code>.</p></li>
+  <li>
+  <p><code>Line#3</code> -- Right-hand <code>numberList</code> is converted to <code>List&lt;<i>X<sub>3</sub></i>&gt;</code> first. Then, the compiler checks whether <code>List&lt;<i>X<sub>3</sub></i>&gt;</code> is assignable to the left-hand type. The left-hand <code>numberList</code> denotes a variable, not a value; it's not subject to capture conversion. The assignment is legal because <code>List&lt;<i>X<sub>3</sub></i>&gt;</code><span class=st>&lt;:</span><code><i>List</i>&lt;? extends Number&gt;</code>.</p></li>
+  <li>
+  <p><code>Line#4</code> -- similar to <code>#3</code>, except <code>List&lt;<i>X<sub>4</sub></i>&gt;</code> is checked against the return type.</p></li>
+</ul>
+<pre>
+      void bar(<i>List</i>&lt;? extends Number&gt; numberList)
+      {
+#a        <u>numberList</u>.stream().map( n-&gt;n.intValue() );
+#b        <u>foo</u>( <u>foo</u>(<u>numberList</u>) ).stream();
+#c        <u>numberList</u>.add( <u>numberList</u>.get(0) ); // compile error
+      }
+</pre>
+<ul>
+  <li>
+  <p><code>Line#a</code> -- <code>numberList</code> is converted to <code>List&lt;<i>X<sub>a</sub></i>&gt;</code>; the <a href="https://docs.oracle.com/javase/8/docs/api/java/util/Collection.html#stream--"><code>stream()</code></a> method returns <code>Stream&lt;<i>X<sub>a</sub></i>&gt;</code>. In <code>map(n-&gt;...)</code>, the type of <code>n</code> is inferred as <code><i>X<sub>a</sub></i></code>, which inherits the method <code>intValue()</code> from <code>Number</code>.</p></li>
+  <li>
+  <p><code>Line#b</code> involves 3 capture conversions</p>
+  <ul>
+    <li><code>numberList</code> is converted to <code>List&lt;<i>X<sub>b1</sub></i>&gt;</code> first;  then, the compiler checks it against the method parameter type.</li>
+    <li><code>foo(numberList)</code>'s type is <code>List&lt;? extends Number&gt;</code>, which is then converted to <code>List&lt;<i>X<sub>b2</sub></i>&gt;</code></li>
+    <li>type of <code>foo(foo(numberList))</code> is converted to <code>List&lt;<i>X<sub>b3</sub></i>&gt;</code>;  <code>stream()</code> returns <code>Stream&lt;<i>X<sub>b3</sub></i>&gt;</code>.</li>
+  </ul></li>
+  <li>
+  <p><code>Line#c</code> -- There are two <code>numberList</code> expressions; the compiler applies capture conversion on them individually, resulting in <code>List&lt;<i>X<sub>c1</sub></i>&gt;</code> and <code>List&lt;<i>X<sub>c2</sub></i>&gt;</code>. The <code>get()</code> method returns <code><i>X<sub>c2</sub></i></code>, and the <code>add()</code> method accepts <code><i>X<sub>c1</sub></i></code>. The code fails to compile, because <code><i>X<sub>c2</sub></i></code><span class=st>&lt;:</span><code><i>X<sub>c1</sub></i></code> is not true.</p></li>
+</ul>
+<p>Obviously, we don't do this kind of analysis in everyday coding; it's tedious and pointless. But it is important to understand that this is how it works under the hood, so that we can analyze more complex cases, for example, this <a href="Wildcard_Case_Studies.html#Map&amp;lt;?,?&amp;gt;_Entry_Set">case study</a>.</p>
+<p>Capture conversion changes types of expressions, which can be surprising; see this <a href="Wildcard_Case_Studies.html#Unexpected_Capture">case study</a>.</p>
+
+<h2 id=Capture_Helper><a href=#Capture_Helper>Capture Helper</a></h2>
+
+<p>Type-variables introduced by capture conversions are "undenotable" -- their names are given arbitrarily, whether by the compiler (like "<code>CAP#1</code>") or by our mind (like "<code><i>X<sub>1</sub></i></code>"). They don't have proper names that we can reference in source code.</p>
+<p><em>If we could</em> reference them in source code, it would be very useful in some cases. Imagine if we could do</p>
+<pre>
+void bar(List&lt;? extends Number&gt; numberList)
+{
+    // numberList.add( numberList.get(0) ); // compile error
+
+    List&lt;<i>X</i>&gt; list = <u>numberList</u>;  // *imaginary* code
+
+    <i>X</i> number = list.get(0);     // get() returns <i>X</i>
+    list.add(number);           // add() accepts <i>X</i>
+</pre>
+<p>Fortunately, there is a way to approach that. We can introduce a generic method with named type-variables</p>
+<pre>
+&lt;<span class=tp>T</span> extends Number&gt; void bar2(List&lt;<span class=tp>T</span>&gt; list)
+{
+    <span class=tp>T</span> number = list.get(0);
+    list.add(number);
+</pre>
+<p>then we can call the method as</p>
+<pre>
+    bar2(<u>numberList</u>);
+</pre>
+<p>What's happening is, first, <code>numberList</code> is capture converted to <code>List&lt;<i>X</i>&gt;</code>; then, the compiler infers <code><span class=tp>T</span> → <i>X</i></code> for <code>bar2()</code>.</p>
+<p>Essentially, the <em>capture helper</em> method <code>bar2</code> assigns a name to the type-variable introduced by the capture conversion. This technique is useful whenever you find it impossible or unpleasant to work with wild types. <!-- but, how does this technique work with lower-bounded wildcard, like List<? super Number>  --></p>
+<p>See case study <a href="Wildcard_Case_Studies.html#Capture_Helper">Capture Helper</a>.</p>
+
+<h2 id=Bounds><a href=#Bounds>Bounds</a></h2>
+
+<p>Capture conversion on wild types depends on bounds of wildcards and bounds of type-parameters.</p>
+
+<h3>Bounds of Type-parameters</h3>
+
+<p>Every type-parameter has an upper bound, limiting the types it can be substituted with. The default upper bound is <code>Object</code>.</p>
+<pre>
+public interface List&lt;<span class=tp>T</span>&gt;  // i.e. List&lt;<span class=tp>T</span> extends Object&gt;
+
+public class Fooo&lt;<span class=tp>T</span> extends Appendable&gt;
+  implements List&lt;<span class=tp>T</span>&gt; {
+</pre>
+<p><code>Fooo&lt;StringBuilder&gt;</code> is legal, because <code>StringBuilder</code><span class=st>&lt;:</span><code>Appendable</code>. But <code>Fooo&lt;String&gt;</code> would be illegal.</p>
+<p>In Java, type-parameters have no lower bounds.</p>
+
+<h3>Bounds of Wildcards</h3>
+
+<p>A wildcard is either upper-bounded or lower-bounded, but not both. By default, a wildcard is upper-bounded by <code>Object</code>.</p>
+
+<h3>upper-bounded wildcard</h3>
+
+<p>Examples</p>
+<pre>
+<i>Fooo</i>&lt;? extends CharSequence&gt;
+
+<i>List</i>&lt;?&gt;  // i.e. <i>List</i>&lt;? extends Object&gt;
+</pre>
+<p>During capture conversion, an upper-bounded wildcard is replaced by a new type-variable, which takes the upper bound of the wildcard, <em>and</em> the upper bound of the type-parameter --</p>
+<pre>
+<i>Fooo</i>&lt;? extends CharSequence&gt;   ⇒<sub>c</sub>   Fooo&lt;<i>X</i>&gt; where <i>X</i> <span class=st>&lt;:</span> CharSequence &amp; Appendable
+                                       // example: <i>X</i> = StringBuilder
+
+<i>List</i>&lt;?&gt;   ⇒<sub>c</sub>   List&lt;<i>X</i>&gt; where <i>X</i> <span class=st>&lt;:</span>  Object &amp; Object    // i.e. <i>X</i> <span class=st>&lt;:</span> Object, i.e. any <i>X</i>
+</pre>
+<p>(We use symbol "⇒<sub>c</sub>" to indicate capture conversion.)</p>
+
+<h3>lower-bounded wildcard</h3>
+
+<p>Examples</p>
+<pre>
+<i>Fooo</i>&lt;? super StringBuilder&gt;
+
+<i>List</i>&lt;? super String&gt;
+</pre>
+<p>During capture conversion, a lower-bounded wildcard is replaced by a new type-variable, which takes the lower bound of the wildcard, and the upper bound of the type-parameter --</p>
+<pre>
+<i>Fooo</i>&lt;? super FileWriter&gt;   ⇒<sub>c</sub>   Fooo&lt;<i>X</i>&gt; where FileWriter <span class=st>&lt;:</span> <i>X</i> <span class=st>&lt;:</span> Appendable
+
+<i>List</i>&lt;? super String&gt;   ⇒<sub>c</sub>   List&lt;<i>X</i>&gt; where String <span class=st>&lt;:</span> <i>X</i> <span class=st>&lt;:</span> Object
+</pre>
+<p>Capture conversion explains how we can operate on values of such wild types --</p>
+<pre>
+void test(<i>Fooo</i>&lt;? super FileWriter&gt; fooo, <i>List</i>&lt;? super String&gt; list)
+{
+    Appendable a = fooo.get(0);   // returns <i>X<sub>1</sub></i>, <i>X<sub>1</sub></i><span class=st>&lt;:</span>Appendable
+
+    list.add( &quot;abc&quot; );  // add(<i>X<sub>2</sub></i>), String<span class=st>&lt;:</span><i>X<sub>2</sub></i>
+}
+</pre>
+
+<h3>Capture Conversion</h3>
+
+<p>A wild type may contain one or more wildcard arguments; each wildcard is captured separately --</p>
+<pre>
+<i>Map</i>&lt;String, ? super Integer&gt;
+   ⇒<sub>c</sub>   Map&lt;String, <i>X</i>&gt; where Integer<span class=st>&lt;:</span><i>X</i>
+
+<i>Function</i>&lt;? super Integer, ? extends CharSequence&gt;
+   ⇒<sub>c</sub>   Function&lt;<i>X<sub>1</sub></i>,<i>X<sub>2</sub></i>&gt; where Integer<span class=st>&lt;:</span><i>X<sub>1</sub></i> and <i>X<sub>2</sub></i><span class=st>&lt;:</span>CharSequence
+</pre>
+<p>See more examples in <a href="Wildcard_Case_Studies.html#Capture_Conversion">case study</a>.</p>
+<p>When we say "the capture conversion of a wild type", we mean the resulting concrete type. For example, the capture conversion of <code>List&lt;?&gt;</code> is <code>List&lt;<i>X</i>&gt;</code>. The capture conversion of a wild type represents every concrete type in the wild type.</p>
+
+<h2 id=Subtyping><a href=#Subtyping>Subtyping</a></h2>
+
+<p>Often we need to test whether one type is a subtype of another type; either type could be a wild type.</p>
+
+<h3>concrete <span class=st>&lt;:</span> concrete</h3>
+
+<p>A concrete type is a subtype of another concrete type, if there's an inheritance relationship, or if they are the same type.</p>
+<pre>
+List&lt;A&gt; <span class=st>&lt;:</span> List&lt;B&gt;  iff  A=B
+
+ArrayList&lt;A&gt; <span class=st>&lt;:</span> List&lt;A&gt; <span class=st>&lt;:</span> Iterable&lt;A&gt;   due to inheritance
+</pre>
+
+<h3>concrete <span class=st>&lt;:</span> wild</h3>
+
+<p>A concrete type is a subtype of a wild type, if it satisfies the capture conversion. From <a href="#Bounds">previous example</a>,</p>
+<pre>
+<i>Fooo</i>&lt;? super FileWriter&gt;   ⇒<sub>c</sub>   Fooo&lt;<i>X</i>&gt; where FileWriter <span class=st>&lt;:</span> <i>X</i> <span class=st>&lt;:</span> Appendable
+</pre>
+<p><code>Fooo&lt;Writer&gt;</code> is a subtype of this wild type, because <code>FileWriter <span class=st>&lt;:</span> Writer <span class=st>&lt;:</span> Appendable</code>.</p>
+<p>Actually, there is a simpler way, we only need to test the bound of the wildcard --</p>
+<pre>
+•  G&lt;B&gt; <span class=st>&lt;:</span> <i>G</i>&lt;? extends A&gt;  iff  B <span class=st>&lt;:</span> A
+•  G&lt;A&gt; <span class=st>&lt;:</span> <i>G</i>&lt;?  super  B&gt;  iff  B <span class=st>&lt;:</span> A
+</pre>
+<p>We don't need to test the bound of the type-parameter, because it must be satisfied by the concrete type already.</p>
+
+<h3>wild <span class=st>&lt;:</span> concrete</h3>
+
+<p>A wild type is a subtype of a concrete type, if the capture conversion is. That may sound odd, but consider</p>
+<pre>
+ArrayList&lt;?&gt;   ⇒<sub>c</sub>   ArrayList&lt;<i>X</i>&gt; where <i>X</i><span class=st>&lt;:</span>Object
+</pre>
+<p><code>ArrayList&lt;?&gt;</code> <span class=st>&lt;:</span> <code>Cloneable</code> only because <code>ArrayList&lt;<i>X</i>&gt;</code> <span class=st>&lt;:</span> <code>Cloneable</code>.</p>
+<p>Or consider this example</p>
+<pre>
+public class MyList&lt;<span class=tp>T</span>, <span class=tp>V</span>&gt; extends ArrayList&lt;<span class=tp>T</span>&gt;{}
+--
+     MyList&lt;Integer, <i>X</i>&gt;  <span class=st>&lt;:</span>  Iterable&lt;Integer&gt;
+=&gt;   MyList&lt;Integer, ?&gt;  <span class=st>&lt;:</span>  Iterable&lt;Integer&gt;
+</pre>
+<p>The capture conversion represents every concrete type in the wild type; if every concrete type is a subtype of some type <code>Z</code>, the wild type must be a subtype of <code>Z</code>. This reasoning applies to the next section too.</p>
+
+<h3>wild <span class=st>&lt;:</span> wild</h3>
+
+<p>Wild type <em><code>Wa</code></em> is a subtype of <em><code>Wb</code></em>, if the capture conversion of <em><code>Wa</code></em> is a subtype of <em><code>Wb</code></em>. See the reasoning in the last section.</p>
+<p>For example, <code>List&lt;? extends Exception&gt;</code> <span class=st>&lt;:</span> <code>Iterable&lt;? extends Throwable&gt;</code>, because</p>
+<pre>
+List&lt;? extends Exception&gt;   ⇒<sub>c</sub>   List&lt;<i>X</i>&gt; where <i>X</i><span class=st>&lt;:</span>Exception
+
+List&lt;<i>X</i>&gt; <span class=st>&lt;:</span> Iterable&lt;<i>X</i>&gt; <span class=st>&lt;:</span> Iterable&lt;? extends Throwable&gt;
+</pre>
+<p>If both wild types are of the same generic class/interface, we can simply check the bounds of the wildcards</p>
+<pre>
+•  G&lt;? extends B&gt; <span class=st>&lt;:</span> G&lt;? extends A&gt;  if  B<span class=st>&lt;:</span>A
+•  G&lt;?  super  A&gt; <span class=st>&lt;:</span> G&lt;?  super  B&gt;  if  B<span class=st>&lt;:</span>A
+
+•  G&lt;?  super  B&gt; <span class=st>&lt;:</span> G&lt;?&gt; for any B
+</pre>
+<p><em>Note: <code>if</code>, not <code>iff</code>. The converse may not be true; see this <a href="Wildcard_Case_Studies.html#Loose_Bound">case study</a>.</em></p>
+<p>As an example, it's quite obvious that</p>
+<pre>
+   <i>Function</i>&lt;? super Number, ? extends Exception&gt;
+ <span class=st>&lt;:</span> <i>Function</i>&lt;? super Double, ? extends Throwable&gt;
+</pre>
+<p>In more complex cases we'll need to resort to capture conversion to analyze subtyping; see <a href="Wildcard_Case_Studies.html#Subtyping">case study</a>.</p>
+
+<h2 id=Nested_Wildcards><a href=#Nested_Wildcards>Nested Wildcards</a></h2>
+
+<p>A wild type is a type, therefore it can be used in substitutions. For example, substitute <code><span class=tp>T</span>→<i>Set</i>&lt;?&gt;</code> on <code>List&lt;<span class=tp>T</span>&gt;</code></p>
+<pre>
+interface List&lt;<i>Set</i>&lt;?&gt;&gt;
+{
+    int     size();
+    <i>Set</i>&lt;?&gt;  get(int);
+    void    add(<i>Set</i>&lt;?&gt;);
+  ...
+</pre>
+<p><code>List&lt;<i>Set</i>&lt;?&gt;&gt;</code> is a concrete type with well defined methods; it's not a wild type that requires capture conversion.</p>
+<p>In particular, <code>List&lt;<i>Set</i>&lt;?&gt;&gt;</code> is <em>not</em> the supertype of all <code>List&lt;Set&lt;<i>X</i>&gt;&gt;</code>; such supertype does not exist in Java.</p>
+<p><em>Capture conversion applies only on top level wildcards, not on nested wildcards.</em></p>
+<p>If we do want to express, vaguely, <em>a list of sets of numbers</em>, we can use multiple levels of wildcards, e.g.</p>
+<pre>
+<i>List</i>&lt;? extends <i>Set</i>&lt;? extends Number&gt;&gt;   ⇒<sub>c</sub>   List&lt;<i>X</i>&gt; where <i>X</i> <span class=st>&lt;:</span> Set&lt;? extends Number&gt;
+</pre>
+<p>It contains subtypes like <code>ArrayList&lt;HashSet&lt;Integer&gt;&gt;</code>, per <a href="#Subtyping">subtyping</a> rules.</p>
+
+<h2 id=Variance><a href=#Variance>Variance</a></h2>
+
+<p>We say that upper-bounded wildcards are co-variant, and lower-bounded wildcards are contra-variant, in the sense that</p>
+<pre>
+•  B <span class=st>&lt;:</span> A   ⇒   G&lt;? extends B&gt; <span class=st>&lt;:</span> G&lt;? extends A&gt;
+•  B <span class=st>&lt;:</span> A   ⇒   G&lt;?  super  A&gt; <span class=st>&lt;:</span> G&lt;?  super  B&gt;
+</pre>
+<p>Variance is the main reason why wildcards are used profusely in public APIs, especially since Java 8. <!-- not always, e.g. sort(List<?>) is not about co-variance --></p>
+
+<h3>Co-variance</h3>
+
+<p>Intuitively, a <a href="https://docs.oracle.com/javase/8/docs/api/java/util/function/Supplier.html"><code>Supplier</code></a> of <code>Integer</code> is <em>kind of</em> a <code>Supplier</code> of <code>Number</code>, because when it supplies an <code>Integer</code>, it supplied a <code>Number</code> too. We say that <code>Supplier</code> is "intuitively co-variant". Unfortunately in Java, it is <em>not</em> the case that</p>
+<pre>
+B <span class=st>&lt;:</span> A   ⇒   Supplier&lt;B&gt; <span class=st>&lt;:</span> Supplier&lt;A&gt;  // nope!
+</pre>
+<p>Therefore we cannot use a <code>Supplier&lt;Integer&gt;</code> where a <code>Supplier&lt;Number&gt;</code> is expected. That is very counter-intuitive.</p>
+<p>The workaround is to use upper-bounded wildcard for its co-variant nature</p>
+<pre>
+B <span class=st>&lt;:</span> A   ⇒   Supplier&lt;? extends B&gt; <span class=st>&lt;:</span> Supplier&lt;? extends A&gt;
+</pre>
+<p>Intuitively co-variant types are almost always used with upper-bounded wildcards, particularly in public APIs. If you see a concrete type <code>Supplier&lt;Something&gt;</code> in an API, it is very likely a mistake.</p>
+
+<h3>Contra-variance</h3>
+
+<p>Intuitively, a <a href="https://docs.oracle.com/javase/8/docs/api/java/util/function/Consumer.html"><code>Consumer</code></a> of <code>Number</code> is <em>kind of</em> a <code>Consumer</code> of <code>Integer</code>, because if it can consume any <code>Number</code>, it can consume any <code>Integer</code> too. We say that <code>Consumer</code> is "intuitively contra-variant".</p>
+<p>Intuitively contra-variant types are almost always used with lower-bounded wildcards, particularly in public APIs.</p>
+<pre>
+B <span class=st>&lt;:</span> A   ⇒   Consumer&lt;? super A&gt; <span class=st>&lt;:</span> Consumer&lt;? super B&gt;
+</pre>
+
+<h3>Variance on type-parameters</h3>
+
+<p>More precisely speaking, "intuitively variant" is a property on type-parameters -- <code>Supplier&lt;R&gt;</code> is intuitively co-variant on <code>R</code>, <code>Consumer&lt;T&gt;</code> is intuitively contra-variant on <code>T</code>.</p>
+<p><a href="https://docs.oracle.com/javase/8/docs/api/java/util/function/Function.html"><code>Function&lt;T,R&gt;</code></a> consumes <code>T</code> and supplies <code>R</code>, therefore it is intuitively contra-variant on <code>T</code> and co-variant on <code>R</code>. The <code>Function</code> type is almost always used with two wildcards correspondingly, particularly in public APIs -</p>
+<pre>
+    Function&lt;? super Foo, ? extends Bar&gt;
+</pre>
+
+<h3>Use-site variance</h3>
+
+<p><code>List&lt;T&gt;</code> both consumes <code>T</code> and supplies <code>T</code>; it is neither intuitively co-variant nor intuitively contra-variant.</p>
+<p>But, we can use <code>List&lt;? extends Foo&gt;</code> to use the type in a co-variant sense, i.e. to see the list only as a supplier of <code>Foo</code>.</p>
+<p>Or, we can use <code>List&lt;? super Foo&gt;</code> to use the type in a contra-variant sense, i.e. to see the list only as a consumer of <code>Foo</code>.</p>
+<p>Therefore in Java, it is the use-site that chooses whether to use a type in a co-variant or contra-variant sense.</p>
+<p>Of course, if a type is intuitively co-variant or contra-variant, the use-site generally shouldn't make an opposite choice. It rarely makes sense to write types like <code>Supplier&lt;? super Foo&gt;</code> or <code>Consumer&lt;? extends Foo&gt;</code>.</p>
+
+<h2 id=Wildcard_Hell><a href=#Wildcard_Hell>Wildcard Hell</a></h2>
+
+<p>Java Generics was designed with a heavy biased towards Collection framework, leading to some controversial decisions, one of which being use-site variance through wildcard. The decision did make a lot of sense back then -- use-site variance is pretty neat for collection interfaces; wildcard usages were moderate and manageable.</p>
+<p>Since Java 8, functional interfaces (<code>Consumer</code>, <code>Function</code>, etc.) are used in a lot of APIs; most of these interfaces are intuitively variant, therefore they are almost always used with wildcards. Consequently, wildcard usages exploded.</p>
+<p>The syntax of wildcard is quite ugly and distracting, especially for types that are slightly more complex, for example,</p>
+<pre>
+    Function&lt;? super A, ? extends Function&lt;? super B, ? extends C&gt;&gt;
+</pre>
+<p>What's worse, these wildcards are frivolous -- they are required, yet they convey no real meanings. Use-site variance is of very little value for intuitively variant types; it just becomes a nuisance.</p>
+<p>Hopefully, you are not too bothered by the problem. After all, wildcard is simple, despite the appearance.</p>
+<p>Maybe we could do something about the appearance; for example, we could render wildcards on javadoc pages like <code>  Function&lt;<sup><sup>?</sup></sup>A, <sub><sub>?</sub></sub>Function&lt;<sup><sup>?</sup></sup>B, <sub><sub>?</sub></sub>C&gt;&gt; </code> which is less distracting.</p>
+<p>Lastly, contrarian to everything we've learned so far, maybe, we can get rid of most wildcards from our code, and things still work out just fine. See this <a href="Wildcard_Case_Studies.html#Missing_Wildcards">case study</a> and judge for yourself.</p>
+
+<h2 id=Links><a href=#Links>Links</a></h2>
+
+<ul>
+  <li>
+  <p><a href="http://docs.oracle.com/javase/specs/jls/se8/html/index.html">Java Language Spec</a></p></li>
+  <li>
+  <p><a href="http://homepages.inf.ed.ac.uk/wadler/fool/program/final/14/14_Paper.pdf">Wild FJ</a></p></li>
+  <li>
+  <p><a href="Wildcard_Case_Studies.html">Wildcard Case Studies</a></p></li>
+</ul>
+<p><em>Contact: <a href="https://groups.google.com/forum/#!forum/java-lang-fans">https://groups.google.com/forum/#!forum/java-lang-fans</a></em></p>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/draft/Capturing_Wildcards.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:11:47 GMT -->
+</html>

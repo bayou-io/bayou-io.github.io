@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/release/0.9/docs/http/Http_Server.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:12:37 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Http Server</title>
+		<link rel="stylesheet" type="text/css" href="../../../../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../../../../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../../../../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../../../../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../../../1.0/docs/index.html">Docs</a><a href="../../../../code.html">Code</a><a href="../../../../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="../index.html">Docs</a> &gt; <a href="Http_Server.html">Http Server</a></p>
+
+<h1>Http Server</h1>
+
+<p>An <code>HttpServer</code> receives requests from clients, sends back responses, through an <code>HttpHandler</code>.</p>
+
+<h2 id=HttpHandler><a href=#HttpHandler>HttpHandler</a></h2>
+
+<p>Interface <a href="../../javadoc/bayou/http/HttpHandler.html" class=api><code>HttpHandler</code></a> has a single abstract method for creating responses for requests.</p>
+<pre>
+    Async&lt;HttpResponse&gt; handle(HttpRequest request);
+</pre>
+<p>An <a href="../../javadoc/bayou/http/HttpServer.html" class=api><code>HttpServer</code></a> requires an <code>HttpHandler</code>, for example</p>
+<pre>
+HttpHandler handler = request -&gt; HttpResponse.text(200, &quot;Hello&quot;);
+
+new HttpServer(handler).start(); // localhost:8080
+</pre>
+<p>Usually, http handlers are more complex that that, and it's better to define a class for you handler.</p>
+<pre>
+public class MyHandler implements HttpHandler
+{
+    @Override
+    public Async&lt;HttpResponse&gt; handle(HttpRequest request)
+    {
+        switch(request.uriPath())
+        {
+            case &quot;/hello&quot; : return HttpResponse.text(200, &quot;Hello&quot;);
+            ...
+            default: return HttpResponse.text(404, &quot;Not Found&quot;);
+        }
+    }
+
+    public static void main(String... args) throws Exception
+    {
+        HttpHandler handler = new MyHandler();
+        HttpServer server = new HttpServer(handler);
+        server.conf()
+            .port(8080)
+            .trafficDump(System.out::print) // for debugging
+            ;
+        server.start();
+    }
+}
+</pre>
+<p>The http handler does not need to worry about HEAD, Range, Conditional requests; treat them as normal GET requests, and the server will transform the response appropriately.</p>
+
+<h2 id=Hot_Reload><a href=#Hot_Reload>Hot Reload</a></h2>
+
+<p>Use <a href="../../javadoc/bayou/http/HotHttpHandler.html" class=api><code>HotHttpHandler</code></a> to hot-reload the server app when source code changes. This is a convenience during development, but not recommended on a production server.</p>
+<pre>
+        // HttpHandler handler = new MyHandler();
+        HotHttpHandler handler = new HotHttpHandler(MyHandler.class).onJavaFiles(SRC_DIR);
+
+        HttpServer server = new HttpServer(handler);
+        ...
+</pre>
+<p>The hot handler will create an instance of <code>MyHandler</code> in a separate classloader, and forward <code>handle(request)</code> calls to it. Whenever <code>HotHttpHandler.handle(request)</code> is called, if some <code>.java</code> files under <code>SRC_DIR</code> have been created/updated/deleted since the last <code>handle(request)</code> call, the source files will be recompiled, and a new instance of <code>MyHandler</code> will be created in a new classloader.</p>
+<p>When reloading occurs, new requests will be handled by the new handler instance; previous outstanding requests are still being served by the old handler instance.</p>
+<p>Reloading only applies to <code>MyHandler</code> and code it can reach. If other parts of the code are changed, e.g. server configuration, you may need to restart the JVM.</p>
+<p>Sometimes, java recompilation does not work perfectly (e.g. when a constant field is changed). When in doubt, restart JVM.</p>
+<p>If you prefer to reload on <code>.class</code> file changes instead (because your IDE does auto-compile on save), do</p>
+<pre>
+        HotHttpHandler handler = new HotHttpHandler(MyHandler.class).onClassFiles();
+</pre>
+<p>You may also want to reload on changes of other types of files, for example</p>
+<pre>
+        HotHttpHandler handler = new HotHttpHandler(MyHandler.class)
+                                     .onJavaFiles(SRC_DIR)
+                                     .onFiles(&quot;prop file&quot;, &quot;glob:**.properties&quot;, SRC_DIR);
+</pre>
+<p>For detailed mechanism of hot reloading, see <a href="../../javadoc/bayou/reload/HotReloader.html" class=api><code>HotReloader</code></a>.</p>
+
+<h2 id=Reading_Request><a href=#Reading_Request>Reading Request</a></h2>
+
+<p>The <a href="../../javadoc/bayou/http/HttpRequest.html" class=api><code>HttpRequest</code></a> interface contains request information like <a href="../../javadoc/bayou/http/HttpRequest.html#method--" class=api><code>method</code></a>, <a href="../../javadoc/bayou/http/HttpRequest.html#uri--" class=api><code>uri</code></a>, <a href="../../javadoc/bayou/http/HttpRequest.html#headers--" class=api><code>headers</code></a>.</p>
+<p>If a request contains a body (for example, POST form data), it is represented in the request <a href="../../javadoc/bayou/http/HttpRequest.html#entity--" class=api><code>entity</code></a>. See <a href="Entity_and_Body.html">Entity and Body</a>. See also <a href="Form_Handling.html">Form Handling</a> and <a href="#Json">Json</a>.</p>
+<p>When the server invokes <code>handle(request)</code> on the http handler, the request becomes the current fiber-local request, which can be retrieved by <a href="../../javadoc/bayou/http/HttpRequest.html#current--" class=api><code>HttpRequest.current()</code></a>.</p>
+
+<h2 id=Creating_Response><a href=#Creating_Response>Creating Response</a></h2>
+
+<p>An http handler returns <code>Async&lt;HttpResponse&gt;</code>, i.e. it produces responses asynchronously. See <a href="../async/Async_Programming.html">Async Programming</a>. For example, to add a delay to a response:</p>
+<pre>
+            case &quot;/delay&quot; :
+                return Fiber.sleep(Duration.ofSeconds(1))
+                    .then( v -&gt; HttpResponse.text(200, &quot;yes?&quot;) );
+</pre>
+<p>The <a href="../../javadoc/bayou/http/HttpResponse.html" class=api><code>HttpResponse</code></a> interface is readonly, describing the response <a href="../../javadoc/bayou/http/HttpResponse.html#status--" class=api><code>status</code></a>, <a href="../../javadoc/bayou/http/HttpResponse.html#headers--" class=api><code>headers</code></a>, <a href="../../javadoc/bayou/http/HttpResponse.html#cookies--" class=api><code>cookies</code></a>, <a href="../../javadoc/bayou/http/HttpResponse.html#entity--" class=api><code>entity</code></a>.</p>
+<p>To create an instance of <code>HttpResponse</code>, use mutable <a href="../../javadoc/bayou/http/HttpResponseImpl.html" class=api><code>HttpResponseImpl</code></a>. For example</p>
+<pre>
+HttpEntity entity = new TextHttpEntity(&quot;Bye&quot;);
+HttpResponseImpl response = new HttpResponseImpl( HttpStatus.c200_OK, entity )
+                            .header(Headers.Connection, &quot;close&quot;)
+                            .cookie(&quot;c1&quot;, &quot;v1&quot;, Cookie.SESSION);
+return response;
+</pre>
+<p><code>HttpResponseImpl</code> implements <code>Async&lt;HttpResponse&gt;</code> therefore it can be returned directly in <code>HttpHandler.handle(request)</code>.</p>
+<p>There are static factory methods in <a href="../../javadoc/bayou/http/HttpResponse.html" class=api><code>HttpResponse</code></a> for common responses, for example, <a href="../../javadoc/bayou/http/HttpResponse.html#text-int-java.lang.CharSequence...-" class=api><code>text(status, texts)</code></a>, <a href="../../javadoc/bayou/http/HttpResponse.html#file-int-java.lang.String-" class=api><code>file(status, filePath)</code></a>, <a href="../../javadoc/bayou/http/HttpResponse.html#redirect-java.lang.String-" class=api><code>redirect(uri)</code></a>. Most of these methods return mutable <code>HttpResponseImpl</code> which the caller can make further modifications, for example</p>
+<pre>
+                return HttpResponse.text(200, &quot;Bye&quot;)
+                        .header(Headers.Connection, &quot;close&quot;)
+                        .cookie(&quot;c1&quot;, &quot;v1&quot;, Cookie.SESSION);
+</pre>
+<p>To create HTML responses, consider <a href="../html/Html_Builder.html">Html Builder</a>.</p>
+<p>To create custom responses, see <a href="Entity_and_Body.html">Entity and Body</a>.</p>
+<p>One instance of <code>HttpResponse</code> may be used to serve multiple requests, for example,</p>
+<pre>
+    final Async&lt;HttpResponse&gt; stockResponse
+            = HttpResponse.file(200, &quot;/tmp/big.txt&quot;)
+                          .then(HttpResponse::gzip)    // compress
+                          .then(HttpResponse::cache);  // cache in memory
+
+    public Async&lt;HttpResponse&gt; handle(HttpRequest request)
+    {
+        ...
+                return stockResponse;
+</pre>
+
+<h2 id=Json><a href=#Json>Json</a></h2>
+
+<p>Currently Bayou does not directly support Json. However, it shouldn't be too hard to plug in your favorite Json library. Suppose you have the following methods for conversion between Json strings and Java objects:</p>
+<pre>
+static Object json2obj(String json){ ... }
+static String obj2json(Object obj ){ ... }
+</pre>
+<p>you can then parse Json requests and generate Json responses like</p>
+<pre>
+static Async&lt;Object&gt; parseJsonRequest(HttpRequest request)
+{
+    HttpEntity entity = request.entity();
+    if(entity==null || !entity.contentType().types().equals(&quot;application/json&quot;))
+        return Async.failure(new Exception(&quot;no json entity&quot;));
+
+    Async&lt;String&gt; json = entity.body().asString(1000);
+    return json.map( str-&gt;json2obj(str) );
+}
+
+static HttpResponseImpl createJsonResponse(Object obj)
+{
+    String json = obj2json(obj);
+    ContentType contentType = ContentType.parse(&quot;application/json; charset=UTF-8&quot;);
+    HttpEntity entity = new TextHttpEntity( contentType, json );
+    return new HttpResponseImpl( HttpStatus.c200_OK, entity );
+}
+</pre>
+
+<h2 id=Cookies><a href=#Cookies>Cookies</a></h2>
+
+<p>Request cookies can be read from <a href="../../javadoc/bayou/http/HttpRequest.html#cookies--" class=api><code>HttpRequest.cookies()</code></a>, and response cookies can be specified in <a href="../../javadoc/bayou/http/HttpResponse.html#cookies--" class=api><code>HttpResponse.cookies()</code></a>.</p>
+<pre>
+String v1 = request.cookie(&quot;c1&quot;);
+
+HttpResponseImpl response = HttpResponse.text(200, &quot;foo&quot;);
+response.cookie(&quot;c1&quot;, &quot;&quot;,   Cookie.DELETE );
+response.cookie(&quot;c2&quot;, &quot;v2&quot;, Cookie.SESSION);
+</pre>
+<p>However, it may be more convenient to use <a href="../../javadoc/bayou/http/CookieJar.html" class=api><code>CookieJar</code></a> which models cookies as a mutable map-like data structure.</p>
+<pre>
+CookieJar cookieJar = CookieJar.current(); // for the current request-response cycle
+
+String foo = cookieJar.get(&quot;foo&quot;);
+if(foo==null)
+    cookieJar.put(&quot;foo&quot;, foo=&quot;bar&quot;, Cookie.SESSION);
+
+String flashMsg = CookieJar.current().remove(&quot;flashMsg&quot;);
+</pre>
+<p>This gives the illusion that we are directly reading and modifying the client's cookie storage.</p>
+<p>CookieJar is a fiber-local concept, it can be used without reference to the current request/response.</p>
+<p>The properties of cookies, particularly the <a href="../../javadoc/bayou/http/Cookie.html#value" class=api><code>values</code></a>, are constrained, see <a href="../../javadoc/bayou/http/Cookie.html" class=api><code>Cookie</code></a> class. That means you cannot put arbitrary strings in a <code>CookieJar</code>. We leave it to programmers to build higher abstractions on top of <code>CookieJar</code>, for example, to encode/sign/encrypt cookie values.</p>
+
+<h2 id=StaticHandler><a href=#StaticHandler>StaticHandler</a></h2>
+
+<p>To serve multiple static files under a directory, use <a href="../../javadoc/bayou/file/StaticHandler.html" class=api><code>StaticHandler</code></a>, which maps a URI prefix to a directory prefix.</p>
+<pre>
+new StaticHandler(&quot;/&quot;, ROOT_DIR);
+
+new StaticHandler(&quot;/data&quot;, DATA_DIR);
+</pre>
+<p>A <code>StaticHandler</code> can be used directly for an <code>HttpServer</code></p>
+<pre>
+HttpHandler handler = new StaticHandler(&quot;/&quot;, ROOT_DIR);
+HttpServer server = new HttpServer(handler);
+</pre>
+<p>However, usually a <code>StaticHandler</code> is used in a parent handler:</p>
+<pre>
+public class MyHandler implements HttpHandler
+{
+    final StaticHandler staticHandler = new StaticHandler(&quot;/&quot;, ROOT_DIR);
+
+    @Override
+    public Async&lt;HttpResponse&gt; handle(HttpRequest request)
+    {
+        // try static files first
+        HttpResponseImpl resp = staticHandler.handle(request);
+        if(resp.statusCode()!=404) // 200, or error
+             return resp;
+
+        // 404 from staticHandler, request is not mapped to a static file.
+        ...
+    };
+</pre>
+<p>Each file in a static handler can be configured individually through <a href="../../javadoc/bayou/file/StaticFileConf.html" class=api><code>StaticFileConf</code></a>. For example</p>
+<pre>
+    ... new StaticHandler(&quot;/&quot;, ROOT_DIR, this::confMod)
+
+    void confMod(StaticFileConf conf)
+    {
+        if(conf.fileSize&lt;5000)
+            conf.cache(true); // cache the file in memory if it&#39;s small
+
+        conf.header(&quot;Cache-Control&quot;, &quot;public&quot;); // for every file
+    }
+</pre>
+<p><code>StaticHandler</code> supports "tagged" URI, which contains the ETag of the file. The response for a tagged URI never expires, therefore the browser can cache the response indefinitely. The tagged URI for a file can be obtained by <a href="../../javadoc/bayou/file/StaticHandler.html#uri-java.lang.String-" class=api><code>StaticHandler.uri( relativeFilePath )</code></a></p>
+<pre>
+// in an html template
+_link().rel(&quot;stylesheet&quot;).type(&quot;text/css&quot;).href( staticHandler.uri(&quot;css/main.css&quot;) )
+</pre>
+
+<h2 id=Server_Configuration><a href=#Server_Configuration>Server Configuration</a></h2>
+
+<p>Configuration of an <code>HttpServer</code> is done on <a href="../../javadoc/bayou/http/HttpServerConf.html" class=api><code>HttpServerConf</code></a>, which can be retrieved by <a href="../../javadoc/bayou/http/HttpServer.html#conf--" class=api><code>HttpServer.conf()</code></a>. Configuration must be done before server starts.</p>
+<pre>
+server.conf().port( 8080 );
+server.conf().trafficDump( System.out::print );
+server.start();
+</pre>
+<p>The config methods can be chained if you prefer.</p>
+<pre>
+server.conf()
+    .port( 8080 )
+    .maxConnectionsPerIp( 5 )
+    .autoGzip( true )
+    //.trafficDump( System.out::print )
+    ;
+</pre>
+<p>See also</p>
+<ul>
+  <li><a href="Server_SSL_Configuration.html">Server SSL Configuration</a>.</li>
+</ul>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/release/0.9/docs/http/Http_Server.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:12:37 GMT -->
+</html>

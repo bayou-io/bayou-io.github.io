@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/release/1.0/docs/html/Html_Builder.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:09:46 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Html Builder</title>
+		<link rel="stylesheet" type="text/css" href="../../../../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../../../../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../../../../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../../../../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../index.html">Docs</a><a href="../../../../code.html">Code</a><a href="../../../../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="../index.html">Docs</a> &gt; <a href="Html_Builder.html">Html Builder</a></p>
+
+<h1>Html Builder</h1>
+
+<p>Html Builder is a set of APIs for building html trees.</p>
+
+<h2 id=Html_Doc><a href=#Html_Doc>Html Doc</a></h2>
+
+<p>To create an html document, subclass <a href="../../javadoc/bayou/html/Html4Doc.html" class=api><code>Html4Doc</code></a> or <a href="../../javadoc/bayou/html/Html5Doc.html" class=api><code>Html5Doc</code></a>, build elements in the constructor.</p>
+<pre>
+public class TestHtml extends Html5Doc
+{
+    public TestHtml()
+    {
+        _head(
+            _script().src(&quot;/site.js&quot;),
+            _link().type(&quot;text/css&quot;).href(&quot;/site.css&quot;)
+        );
+
+        _body(()-&gt;
+        {
+            _p().id(&quot;p1&quot;).add(
+                &quot;Back to &quot;,
+                _a(&quot;home&quot;).href(&quot;/&quot;)
+            ).translate(false);
+        });
+    }
+}
+</pre>
+<p>The document can be serialized to chars.</p>
+<pre>
+new TestHtml().getContentBody(System.out::print);
+
+// output:
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+    &lt;head&gt;
+        &lt;script src=&quot;/site.js&quot;&gt;&lt;/script&gt;
+        &lt;link type=&quot;text/css&quot; href=&quot;/site.css&quot;&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+        &lt;p id=&quot;p1&quot; translate=&quot;no&quot;&gt;
+            Back to &lt;a href=&quot;/&quot;&gt;home&lt;/a&gt;
+        &lt;/p&gt;
+    &lt;/body&gt;
+&lt;/html&gt;
+</pre>
+<p>Html documents are usually built and served in response to http requests.</p>
+<pre>
+HttpHandler handler = request -&gt;
+{
+    Html5Doc html = new TestHtml();
+    return html.toResponse(200);
+};
+
+new HttpServer(handler).start(); // localhost:8080
+</pre>
+<p>Enable <a href="../http/Http_Server.html#Hot_Reload">Hot Reload</a> during development, so that changes can be seen in browser instantly.</p>
+
+<h2 id=Build_Elements><a href=#Build_Elements>Build Elements</a></h2>
+
+<p>A builder method creates an html element and adds it to the context parent. For example, <a href="../../javadoc/bayou/html/Html5.html#Z:Z_a--" class=api><code>_a()</code></a> builds an <code>&lt;a&gt;</code> element.</p>
+<pre>
+    _div(()-&gt;
+    {
+        // the context parent here is the &lt;div&gt; element
+        _a(); // add an &lt;a&gt; element to the &lt;div&gt; element
+
+        // equivalent to
+        ContextParent.add( new A() );
+    });
+</pre>
+<p>A builder method returns the element, which can be referenced and modified later.</p>
+<pre>
+    INPUT email = _input().name(&quot;email&quot;);
+    ...
+    if(condition)
+        email.value(&quot;john@example.com&quot;);
+</pre>
+<p>Sometimes we want to create an element without adding it to the current context parent. Use the element constructor.</p>
+<pre>
+    DIV logo = new DIV().class_(&quot;logo&quot;).add( children... );
+
+    _div().id(&quot;header&quot;).add(logo, ...);
+    ...
+    _div().id(&quot;footer&quot;).add(..., logo);
+</pre>
+<p>There are builder methods for non-elements.</p>
+<pre>
+    _text(&quot;if n &gt; &quot;, 7);          //  if n &amp;gt; 7
+    _textf(&quot;%d &lt; m &lt; %d&quot;, 0, 7);  //  0 &amp;lt; m &amp;lt; 7
+    _comment(&quot;start component&quot;);  //  &lt;!-- start component --&gt;
+    _raw(&quot;&lt;span id=&quot;);            //  &lt;span id=
+</pre>
+<p>Builder methods by convention start with underscore "_" so that they are not confused with "normal" methods.</p>
+
+<h2 id=Set_Attributes><a href=#Set_Attributes>Set Attributes</a></h2>
+
+<p>Every element class has methods for standard attributes. For example, class <a href="../../javadoc/bayou/html/Html5.A.html" class=api><code>A</code></a> has methods like <a href="../../javadoc/bayou/html/Html5.A.html#href-java.lang.CharSequence-" class=api><code>href(CharSequence)</code></a>. These methods return <code>this</code> for method chaining.</p>
+<pre>
+    _a().class_(&quot;nav&quot;).href(&quot;/&quot;); // &lt;a class=&quot;nav&quot; href=&quot;/&quot;&gt;
+</pre>
+<p>Attribute values are usually strings; some are integer or boolean type.</p>
+<pre>
+    _input().width(100).readonly(true).disabled(false); // &lt;input width=&quot;100&quot; readonly&gt;
+    // notice how boolean attributes `readonly` and `disabled` are rendered
+</pre>
+<p>Some attributes are boolean-ish; they use idiosyncratic tokens to represent <code>true/false</code>.</p>
+<pre>
+    _input().translate(true).autocomplete(false); // &lt;input translate=&quot;yes&quot; autocomplete=&quot;off&quot;&gt;
+</pre>
+<p>For data attributes and event attributes, use <code>data(name,value)</code> and <code>on(event,script)</code>.</p>
+<pre>
+    _div().data(&quot;x&quot;, 123).on(&quot;click&quot;, &quot;alert()&quot;); // &lt;div data-x=&quot;123&quot; onclick=&quot;alert()&quot;&gt;
+</pre>
+<p>For arbitrary non-standard attributes, use <code>attr(name, value)</code>.</p>
+<pre>
+    _div().attr(&quot;foo&quot;, &quot;a&amp;b&quot;).attr(&quot;z&quot;, 123); // &lt;div foo=&quot;a&amp;amp;b&quot; z=&quot;123&quot;&gt;
+</pre>
+<p>Attributes can be set/reset at any time.</p>
+<pre>
+    A a1 = _a(&quot;home&quot;).class_(&quot;nav&quot;).href(&quot;/&quot;).target(&quot;f1&quot;); // &lt;a class=&quot;nav&quot; href=&quot;/&quot; target=&quot;f1&quot;&gt;home&lt;/a&gt;
+    ...
+    if(condition) // change href, set id, add class, remove target
+        a1.href(&quot;/sweet&quot;).id(&quot;a1&quot;).class_add(&quot;pez&quot;).target(null); // &lt;a class=&quot;nav pez&quot; href=&quot;/sweet&quot; id=&quot;a1&quot;&gt;
+</pre>
+
+<h2 id=Add_Children_in_a_Code_Block><a href=#Add_Children_in_a_Code_Block>Add Children in a Code Block</a></h2>
+
+<p>If an element can contain children, you can pass it a code block to add children to it. The element becomes the context parent when the code block is executed.</p>
+<p>The code block can be passed to the builder method, or to the <code>add</code> method of the element</p>
+<pre>
+    // _element( code-block )
+    _div(() -&gt;
+    {
+        _span();
+    });
+
+    // element.add( code-block )
+    _div().id(&quot;div1&quot;).add(()-&gt;
+    {
+        _span();
+    });
+</pre>
+<p>You may consider defining a shortcut for <code>()-&gt;{}</code> in your IDE, since it's not very easy to type.</p>
+<p>The code block can mix normal Java code and html builder code.</p>
+<pre>
+    _form().action(&quot;/query&quot;).add(()-&gt;
+    {
+        _text(&quot;enter 3 values: &quot;);
+        for(int i=0; i&lt;3; i++)
+            _input().name(&quot;v_&quot;+i); // &lt;input name=&quot;v_0&quot;&gt; ...
+        _button(&quot;submit&quot;);
+    });
+
+    _table(()-&gt;
+    {
+        _tr( _th( &quot;key&quot; ), _th( &quot;value&quot; ) );
+        System.getProperties().forEach( (k,v)-&gt;
+                _tr( _td( k ), _td( v ) )
+        );
+    }).border(1);
+</pre>
+
+<h2 id=Add_Children_as_Method_Args><a href=#Add_Children_as_Method_Args>Add Children as Method Args</a></h2>
+
+<p>If an element can contain children, you can pass an array of children to the builder method, or to the <code>add</code> method of the element</p>
+<pre>
+    _p(
+        &quot;a&amp;b&quot;, 123, _br(),
+        _a(&quot;home&quot;).href(&quot;/&quot;)
+    );
+
+    _p().id(&quot;p1&quot;).add(
+        &quot;a&amp;b&quot;, 123, _br(),
+        _a(&quot;home&quot;).href(&quot;/&quot;)
+    );
+</pre>
+<p>A child arg can be any object, including <code>null</code>; if an arg is not an <a href="../../javadoc/bayou/html/HtmlPiece.html" class=api><code>HtmlPiece</code></a>, it will be converted to an <a href="../../javadoc/bayou/html/HtmlText.html" class=api><code>HtmlText</code></a>.</p>
+<pre>
+    _p(&quot;abc&quot;, 123);
+    // equivalent to:
+    _p( _text(&quot;abc&quot;), _text(123) );
+</pre>
+<p>Some more complex examples:</p>
+<pre>
+    TABLE table = _table(
+        _tr( _th(&quot;a&quot;), _td(100) ),
+        _tr( _th(&quot;b&quot;), _td(200) )
+    );
+    if(condition)
+        table.add( _tr( _th(&quot;c&quot;), _td(300) ) );
+
+    OL ol = _ol();
+    Stream.of(&quot;aaa&quot;, &quot;bbb&quot;, &quot;ccc&quot;).forEach( string-&gt;
+        ol.add( _li(string) )
+    );
+</pre>
+<p>There's some magic here -- we know that <code>_tr(...)</code> is executed before <code>_table(...)</code> is executed, so the <code>&lt;tr&gt;</code> element was first created and added to a parent that's not the <code>&lt;table&gt;</code>. See <a href="../../javadoc/bayou/html/HtmlBuilder.ContextParent.html#detach-java.lang.Object...-" class=api><code>ContextParent.detach()</code></a> for explanation.</p>
+<p>One annoying thing about method args is that a trailing comma is not allowed, creating a problem when cut/copy/paste lines of children. Workarounds:</p>
+<pre>
+    _table(
+        _tr( _th(&quot;a&quot;), _td(100) ),
+        _tr( _th(&quot;b&quot;), _td(200) ),  // &lt;- comma
+        &quot;&quot; // spurious last arg
+    );
+
+    _table() // add one child at a time
+        .add( _tr( _th(&quot;a&quot;), _td(100) ) )
+        .add( _tr( _th(&quot;b&quot;), _td(200) ) )
+        ;
+
+    _table(()-&gt;  // use code block instead
+    {
+        _tr( _th(&quot;a&quot;), _td(100) );
+        _tr( _th(&quot;b&quot;), _td(200) );
+    });
+</pre>
+
+<h2 id=Summary_of_Methods><a href=#Summary_of_Methods>Summary of Methods</a></h2>
+
+<pre>
+new DIV();     // constructor
+_div();        // builder
+div.id(&quot;1&quot;);   // attribute
+
+// builder with children
+_div( ()-&gt;{...} );
+_div( child1, child2, ... );
+
+// add children
+div.add( ()-&gt;{...} );
+div.add( child1, child2, ... );
+</pre>
+
+<h2 id=See_Also><a href=#See_Also>See Also</a></h2>
+
+<p><a href="Code_Organization.html">Code Organization</a> - use templates, sub-routines.</p>
+<p><a href="Custom_Builder.html">Custom Builder</a> - create custom components</p>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/release/1.0/docs/html/Html_Builder.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:09:46 GMT -->
+</html>

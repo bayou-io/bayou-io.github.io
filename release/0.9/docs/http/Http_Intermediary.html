@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/release/0.9/docs/http/Http_Intermediary.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:12:40 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Http Intermediary</title>
+		<link rel="stylesheet" type="text/css" href="../../../../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../../../../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../../../../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../../../../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../../../1.0/docs/index.html">Docs</a><a href="../../../../code.html">Code</a><a href="../../../../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="../index.html">Docs</a> &gt; <a href="Http_Intermediary.html">Http Intermediary</a></p>
+
+<h1>Http Intermediary</h1>
+
+<p>An HTTP intermediary forwards requests and responses between clients and servers.</p>
+<pre>    client &#8644; { intermediary } &#8644; server </pre>
+<p>We can implement an intermediary by using <a href="../../javadoc/bayou/http/HttpServer.html" class=api><code>HttpServer</code></a> and <a href="../../javadoc/bayou/http/HttpClient.html" class=api><code>HttpClient</code></a></p>
+<pre>    client &#8644; { HttpServer &#8644; HttpClient } &#8644; server </pre>
+<p>The simplest implementation of a proxy would be:</p>
+<pre>
+new HttpServer( new HttpClient()::send ).start();
+</pre>
+<p>However, some default features of <code>HttpServer</code> and <code>HttpClient</code> are not appropriate for intermediaries; they should be disabled by <a href="../../javadoc/bayou/http/HttpServerConf.html#setProxyDefaults--" class=api><code>HttpServerConf.setProxyDefaults()</code></a> and <a href="../../javadoc/bayou/http/HttpClient.html#send0-bayou.http.HttpRequest-bayou.tcp.TcpAddress-" class=api><code>HttpClient.send0()</code></a>.</p>
+<p>The following sections show two examples of intermediaries: Proxy, Load Balancer.</p>
+
+<h2 id=Create_a_Proxy><a href=#Create_a_Proxy>Create a Proxy</a></h2>
+
+<p>To create a simple HTTP proxy at port <code>9090</code>:</p>
+<pre>
+        HttpClient downstream = new HttpClient();
+        HttpHandler proxyHandler = request-&gt;
+        {
+            return downstream.send0(request, null);    // use send0() instead of send()
+        };
+
+        HttpServer proxy = new HttpServer(proxyHandler);
+        proxy.conf()
+            .port(9090)
+            .setProxyDefaults()                        // use proxy settings
+            .trafficDump(System.out::print)
+        ;
+        proxy.start();
+</pre>
+<p>It doesn't do much, except the traffic is dumped which can be used for diagnostics.</p>
+<p>See also <a href="https://github.com/zhong-j-yu/bayou/blob/0.9/src/_bayou/_HttpProxy.java">_HttpProxy.java</a> for a simple HTTP+HTTPS proxy demo.</p>
+<p>We can add any custom behaviors to the proxy. For example, to block spam hosts:</p>
+<pre>
+        Set&lt;String&gt; spamHosts = new ConcurrentHashMap&lt;String,Boolean&gt;().keySet(true);
+        HttpHandler adminHandler = request-&gt;
+        {
+            String add = request.uriParam(&quot;add&quot;);
+            if(add!=null) spamHosts.add(add);
+            return HttpResponse.text(200, &quot;spamHosts:&quot;+spamHosts);
+        };
+
+        HttpClient downstream = new HttpClient();
+        HttpHandler proxyHandler = request-&gt;
+        {
+            // use &lt;http://proxy-admin/&gt; to manage the spam list.
+            if(request.host().equals(&quot;proxy-admin&quot;))
+                return adminHandler.handle(request);
+
+            if(spamHosts.contains(request.host()))
+                return HttpResponse.text(403, &quot;blocked&quot;);
+
+            return downstream.send0(request, null);
+        };
+</pre>
+
+<h2 id=Create_a_Load_Balancer><a href=#Create_a_Load_Balancer>Create a Load Balancer</a></h2>
+
+<p>A load balancer dispatches a client request to one of several internal servers, based on request cookie, URI, IP, etc.</p>
+<p>In the following demo, we have two internal servers at port <code>8081</code> and <code>8082</code>. The load balancer runs at port <code>80</code>, and dispatches requests based on URIs.</p>
+<pre>
+        for(int port: new int[]{8081, 8082})
+        {
+            HttpServer server = new HttpServer(request-&gt;
+                HttpResponse.text(200, &quot;from server &quot;+port));
+            server.conf().port(port);
+            server.start();
+        }
+
+        HttpClient downstream = new HttpClient();
+        HttpServer loadBalancer = new HttpServer(request-&gt;
+        {
+            TcpAddress dest = new TcpAddress(&quot;127.0.0.1&quot;, 8081);
+            if(request.uriPath().equals(&quot;/cat&quot;))
+                dest = new TcpAddress(&quot;127.0.0.1&quot;, 8082);
+
+            HttpRequestImpl reqMod = new HttpRequestImpl(request); // copy and modify
+            reqMod.header(&quot;X-Forwarded-For&quot;, request.ip().getHostAddress());
+            reqMod.header(&quot;X-Forwarded-Proto&quot;, request.scheme());
+
+            return downstream.send0(reqMod, dest);
+        });
+        loadBalancer.conf()
+            .port(80)
+            .setProxyDefaults()
+        ;
+        loadBalancer.start();
+</pre>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/release/0.9/docs/http/Http_Intermediary.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:12:40 GMT -->
+</html>

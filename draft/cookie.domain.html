@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/draft/cookie.domain.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:11:47 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Cookie Domain</title>
+		<link rel="stylesheet" type="text/css" href="../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../release/1.0/docs/index.html">Docs</a><a href="../code.html">Code</a><a href="../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="index.html">draft</a></p>
+
+<h1>Cookie Domain</h1>
+
+<p><em>Zhong Yu, 2015-06-05</em></p>
+<p>This article explains HTTP cookie domain policy, based on RFC_6265 and current browser behaviors.</p>
+
+<h2 id=Origin_Domain><a href=#Origin_Domain>Origin Domain</a></h2>
+
+<p>A website can set a cookie in a response; the cookie will be sent back to the same website in subsequent requests.</p>
+<p>More precisely, if an HTTP client issues a request to a domain, and the response contains a valid cookie, the client should apply the cookie to subsequent requests to the same domain (subject to other constraints). We say the request domain is the <strong><em>origin domain</em></strong> of the cookie. <strong>A cookie is always applicable to its origin domain.</strong></p>
+<p>For example, cookie <code>foo=bar</code> originated from <code>www.cats.com</code> is applied to later requests to the same domain -</p>
+<pre>
+ request#0   GET http://www.cats.com:8080/abc HTTP/1.1
+
+response#0   HTTP/1.1 200 OK
+             Set-Cookie: foo=bar; Path=/; Expires=Sun, 02 Feb 2020 00:00:00 GMT
+       ...
+
+ request#n   GET https://www.cats.com/xyz HTTP/1.1
+             Cookie: foo=bar
+</pre>
+<p>Note that the port number doesn't matter here; the scheme(<code>http/https</code>) doesn't matter either (unless cookie's <code>Secure</code> attribute is set). In the example above, the cookie originated from <code>http://www.cats.com:8080</code> is applicable to request to <code>https://www.cats.com:443</code> as well, even though the schemes and ports are different.</p>
+<p>If the request host is an IP address, e.g. <code>127.0.0.1</code>, we say, for the purpose of this article, that the origin domain is the IP.</p>
+
+<h2 id=Cover_Domain><a href=#Cover_Domain>Cover Domain</a></h2>
+
+<p>A cookie can have the "Domain" attribute set to a valid domain name, which we call the <strong><em>cover domain</em></strong> of the cookie. If the "Domain" attribute is not set, we say the cover domain is null.</p>
+<p><strong>If cover domain is null, a cookie is <em>only</em> applicable to its origin domain.</strong> For example, a cookie from <code>www.cats.com</code> is <em>not</em> applicable to <code>cats.com</code>, and vice versa, if cover domain is null.</p>
+<p><strong>If cover domain is set, a cookie is applicable to the cover domain and all its subdomains.</strong> For example</p>
+<pre>
+ request#0   GET http://foo.www.cats.com/ HTTP/1.1
+
+response#0   HTTP/1.1 200 OK
+             Set-Cookie: foo=bar; Path=/; Domain=cats.com
+</pre>
+<p>the cover domain is <code>cats.com</code>, therefore the cookie is applicable to <code>cats.com</code>, <code>x.cats.com</code>, <code>x.y.cats.com</code>, etc.</p>
+<p><strong>The cover domain must cover the origin domain</strong>, that is, the cover domain must be the same as, or a parent of, the origin domain. In the example above, the origin domain is <code>foo.www.cats.com</code>, therefore the cover domain could only be set to <code>foo.www.cats.com</code>, <code>www.cats.com</code>, or <code>cats.com</code> (but not <code>&quot;com&quot;</code>, see next section).</p>
+<p>If the origin domain is an IP, the cover domain must be null. <em>A cookie with an IP origin is only applicable to that IP</em>.</p>
+<p>A cover domain should not contain a leading dot, like in <code>.cats.com</code>; if it does, the client should remove the leading dot.</p>
+<p>If a cookie's cover domain is set illegally or incorrectly, the client should ignore the cookie entirely.</p>
+<p>On a related matter, a cookie's identity is defined by the triplet <code>(name, domain, path)</code>, of which <code>domain</code> is either the cover domain if it's set, or the origin domain otherwise. This needs to be noted when replacing or deleting a cookie.</p>
+
+<h2 id=Public_Suffix><a href=#Public_Suffix>Public Suffix</a></h2>
+
+<p>Obviously, we cannot allow a cover domain to be <code>&quot;com&quot;</code>, otherwise, a cookie from <code>cats.com</code> could be sent to <code>dogs.com</code>, causing problems. <strong>A cover domain must not be a public suffix</strong>.</p>
+<p>A <strong><em>public suffix</em></strong> is a domain under which the general public can register direct subdomains. For example, <code>&quot;com&quot;</code>, <code>&quot;org&quot;</code>, <code>&quot;uk&quot;</code>, <code>&quot;co.uk&quot;</code> are public suffixes. Direct subdomains of a public suffix belong to different owners, therefore their cookies should not mingle, and that's why a public suffix cannot be allowed as cover domain.</p>
+<p>A private company can also offer a domain as a public suffix. For example, when you lease a server from Amazon AWS, a domain name is assigned to it, e.g. <code>foo.compute.amazonaws.com</code>. You "own" this domain in the sense that its usage is at your discretion. Someone else may own a sibling <code>bar.compute.amazonaws.com</code>. To prevent <code>bar</code> from sending cookies to <code>foo</code>, the domain <code>compute.amazonaws.com</code> is listed as a public suffix.</p>
+<p>The complete list of public suffixes is maintained at <a href="https://publicsuffix.org/">https://publicsuffix.org</a>. In addition, we recommend that</p>
+<ul>
+  <li>
+  <p>As far as cookie handling is concerned, <em>every TLD is a public suffix</em>,  even if it's not listed.  For example, <code>&quot;test&quot;</code>, <code>&quot;local&quot;</code>, <code>&quot;my-fake-tld&quot;</code>, etc. cannot be allowed as cover domains.</p></li>
+  <li>
+  <p>As far as cookie handling is concerned, <em>parents of a public suffix are public suffixes too</em>,  even if they are not listed.  For example, <code>amazonaws.com</code> is not listed as a public suffix, yet it cannot be allowed as cover domain either,  because it is the parent of public suffix <code>compute.amazonaws.com</code>.</p></li>
+</ul>
+<p>These two bullet points cannot be derived from the texts of RFC_6265 and publicsuffix.org; instead, they are concluded from current behaviors of major browsers. Other client and server implementers should follow these behaviors too. It's a simplified and conservative approach for dealing with subtleties of public suffix. See next section for a more complicated narrative.</p>
+<p><strong>Summary of rules</strong> from above:</p>
+<ul>
+  <li>If a cookie's origin domain is an IP, the cover domain must be null.</li>
+  <li>If a cookie's cover domain is null, the cookie is only applicable to its origin domain.</li>
+  <li>If a cookie's cover domain is set,
+  <ul>
+    <li>the cookie is applicable to the cover domain and all its subdomains;</li>
+    <li>the cover domain must cover the origin domain;</li>
+    <li>the cover domain must not be a TLD, a public suffix, or a parent of a public suffix.</li>
+  </ul></li>
+</ul>
+
+<h2 id=More_on_Public_Suffix><a href=#More_on_Public_Suffix>More on Public Suffix</a></h2>
+
+<p>According to RFC_6265, if a cookie's cover domain is a public suffix,</p>
+<ul>
+  <li>if the origin domain is the same domain, reset the cover domain to null, then accept the cookie</li>
+  <li>otherwise, ignore the cookie entirely</li>
+</ul>
+<p>The first clause looks odd, but it permits a public suffix domain (if it ever resolves to an HTTP server) to specify itself as the cover domain, while making sure the cookie will not propagate to subdomains. Presumably, this clause is for backward compatibility of some existing websites on public suffix domains. However, the only major browser that currently implements this clause is Firefox; all other major browsers simply reject such cookies. Therefore in the previous section, to follow the browser consensus, we reject this case as well - a cover domain cannot be a public suffix, regardless of the origin domain.</p>
+<p>Another problem - RFC_6265 does not properly handle the situation where a public suffix has a parent that is not a public suffix; such situation probably didn't exist when the RFC was written. Strictly following the texts of the RFC, a client would allow <code>foo.compute.amazonaws.com</code> to set a cookie's cover domain to <code>amazonaws.com</code>, and the cookie would be applicable to <code>bar.compute.amazonaws.com</code>. This behavior is clearly undesired.</p>
+<p>Fortunately, no major browser behaves that way; however, browsers handle the case differently. Safari appears to simply treat <code>amazonaws.com</code> as a public suffix, rejecting all cookies with it as cover domain. In the previous section, we follow this simple approach, rejecting any parent of public suffix as cover domain.</p>
+<p>On the other hand, Firefox and Chrome take a more sophisticated approach, allowing <code>amazonaws.com</code> as cover domain in some cases (e.g. when the origin domain is <code>www.amazonaws.com</code>) while making sure those cookies do not propagate below <code>compute.amazonaws.com</code>. This approach is better; however, Amazon cannot really rely on it to share cookies, because not all browsers support the approach.</p>
+<p>These discussions intend to justify the conservative approach we laid out in the previous section.</p>
+<p>Nevertheless, it would be interesting to discuss what is the "ideal" way to handle public suffixes in cookie handling -</p>
+<p>The domain <code>amazonaws.com</code> is not really a public suffix, because its direct subdomains are not open to the public; instead, they are all controlled by Amazon. It doesn't really hurt if <code>www.amazonaws.com</code> and <code>zzz.amazonaws.com</code>, or even <code>compute.amazonaws.com</code>, share cookies though domain <code>amazonaws.com</code> - as long as these cookies do not propagate downwards across public suffix <code>compute.amazonaws.com</code>, reaching user websites. At the same time, we must not allow a user website under <code>compute.amazonaws.com</code> to set a cover domain to <code>amazonaws.com</code>, interfering with Amazon's websites.</p>
+<p>With that in mind, the next section defines a more sensible model for cookie domain policy.</p>
+
+<h2 id=Coverage_Model><a href=#Coverage_Model>Coverage Model</a></h2>
+
+<p>A cover domain's <em>coverage</em> is the set of domains that the cookie is applicable to; the set is defined by:</p>
+<ul>
+  <li>the set contains the cover domain;</li>
+  <li>if the set contains <strong><em>x</em></strong>, and <strong><em>x</em></strong> is not a public suffix,  the set contains all direct subdomains of <strong><em>x</em></strong>.</li>
+</ul>
+<p>That is, the coverage starts from the domain, propagates downwards, stopped at public suffix nodes.</p>
+<p>The coverage is tested when receiving and sending the cookie, in a symmetric way</p>
+<ul>
+  <li>the cover domain must cover the request domain
+  <ul>
+    <li>when the cookie is received</li>
+    <li>when the cookie is applied to a request</li>
+  </ul></li>
+</ul>
+<p>Return to the Amazon example,</p>
+<ul>
+  <li><code>compute.amazonaws.com</code> only covers itself, since it's a public suffix.</li>
+  <li><code>amazonaws.com</code> covers <code>amazonaws.com</code>, <code>www.amazonaws.com</code>, <code>foo.www.amazonaws.com</code>,  and <code>compute.amazonaws.com</code>; it does not cover <code>foo.compute.amazonaws.com</code>.</li>
+</ul>
+<p>Here's a pseudo code for getting the <code>list</code> of cover domains that cover a given <code>request_domain</code></p>
+<pre>
+    list.add(request_domain)
+    for each parent of request_domain, ordered from longest to shortest
+        if parent is a public suffix
+            break loop
+        list.add(parent)
+</pre>
+
+<h2 id=Links><a href=#Links>Links</a></h2>
+
+<ul>
+  <li>
+  <p><a href="http://tools.ietf.org/html/rfc6265">RFC 6265 - HTTP State Management Mechanism</a></p></li>
+  <li>
+  <p><a href="http://www.ietf.org/mail-archive/web/http-state/current/msg01457.html">Browser Behaviors on Cookie Domain and Public Suffix</a></p></li>
+  <li>
+  <p><a href="https://github.com/zhong-j-yu/bayou/blob/9e0314587c7dce24ee35ac114504b7a08b5ee588/src/bayou/http/InMemoryCookieStorage.java#L150">A Cookie Storage using the Coverage Model</a></p></li>
+</ul>
+<p><em>Contact: <a href="mailto:&#98;&#97;y&#x6f;&#x75;-&#105;&#x6f;&#x40;&#103;&#111;&#111;&#103;&#108;&#x65;&#x67;&#114;&#111;&#117;&#112;&#x73;&#46;&#99;&#111;&#x6d;">&#98;&#97;y&#x6f;&#x75;-&#105;&#x6f;&#x40;&#103;&#111;&#111;&#103;&#108;&#x65;&#x67;&#114;&#111;&#117;&#112;&#x73;&#46;&#99;&#111;&#x6d;</a></em></p>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/draft/cookie.domain.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:11:47 GMT -->
+</html>

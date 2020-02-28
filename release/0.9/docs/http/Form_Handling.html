@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/release/0.9/docs/http/Form_Handling.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:12:38 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Form Handling</title>
+		<link rel="stylesheet" type="text/css" href="../../../../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../../../../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../../../../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../../../../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../../../1.0/docs/index.html">Docs</a><a href="../../../../code.html">Code</a><a href="../../../../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="../index.html">Docs</a> &gt; <a href="Http_Server.html">Http Server</a> &gt; <a href="Form_Handling.html">Form Handling</a></p>
+
+<h1>Form Handling</h1>
+
+<p>The data of a form submission can be modeled by <a href="../../javadoc/bayou/form/FormData.html" class=api><code>FormData</code></a>. An server app can parse the request to get the <code>FormData</code> then read the field values.</p>
+
+<h2 id=Html_Builder><a href=#Html_Builder>Html Builder</a></h2>
+
+<p>Here are some examples to construct html forms in <a href="../html/Html_Builder.html">Html Builder</a></p>
+<pre>
+_form().action(&quot;/query&quot;).add(
+    &quot;Term: &quot;, _input().name(&quot;term&quot;), _br(),
+    _button(&quot;query&quot;)
+)
+
+_form().method(&quot;POST&quot;).action(&quot;/post&quot;).enctype(FormData.ENC_MULTIPART).add(
+    CsrfToken._input(),  // hidden input for csrf token
+    _input().name(&quot;s1&quot;), _br(),
+    _input().name(&quot;f1&quot;).type(&quot;file&quot;), _br(),
+    _button(&quot;upload&quot;)
+)
+</pre>
+
+<h2 id=GET><a href=#GET>GET</a></h2>
+
+<p>If the form submission is a GET request, all form data are in the request URI.</p>
+<p>For simple cases, you can use <a href="../../javadoc/bayou/http/HttpRequest.html#uriParam-java.lang.String-" class=api><code>request.uriParam(name)</code></a>.</p>
+<pre>
+String term = request.uriParam(&quot;term&quot;);
+</pre>
+<p>To get the full form data, use <a href="../../javadoc/bayou/form/FormData.html#parse-java.lang.CharSequence-" class=api><code>FormData.parse(uri)</code></a>.</p>
+<pre>
+FormData fd = FormData.parse( request.uri() );
+String term = fd.param(&quot;term&quot;);
+...
+</pre>
+
+<h2 id=POST><a href=#POST>POST</a></h2>
+
+<p>If the form submission is a POST request, the form data are in the request body. Use <a href="../../javadoc/bayou/form/FormData.html#parse-bayou.http.HttpRequest-" class=api><code>FormData.parse(request)</code></a></p>
+<pre>
+if(&quot;POST&quot;.equals(request.method()))
+{
+    Async&lt;FormData&gt; afd = FormData.parse(request); // async!
+    return afd.then( fd-&gt;
+    {
+        String s1 = fd.param(&quot;s1&quot;);
+        FormDataFile f1 = fd.file(&quot;f1&quot;);
+        //fd.deleteFiles();
+        return HttpResponse.text(200, s1, &quot;\n&quot;, f1.toString());
+    });
+}
+</pre>
+<p>Note that the URI of a POST request could also be treated as (separate) form data, use <code>parse(uri)</code> for that purpose; <code>parse(request)</code> is for the request body only.</p>
+
+<h2 id=Parser_Configuration><a href=#Parser_Configuration>Parser Configuration</a></h2>
+
+<p>The <code>FormData.parse(uri)</code> and <code>FormData.parse(request)</code> methods use the default parser configuration. You can create a <a href="../../javadoc/bayou/form/FormParser.html" class=api><code>FormParser</code></a> with custom configuration instead</p>
+<pre>
+static final FormParser parser = new FormParser()
+    .charset(StandardCharsets.US_ASCII)
+    .maxFileEntries(3)
+    ;
+
+// usage
+
+    FormData fd = parser.parse( request.uri() );
+
+    Async&lt;FormData&gt; afd = parser.parse(request);
+</pre>
+
+<h2 id=CSRF_Detection><a href=#CSRF_Detection>CSRF Detection</a></h2>
+
+<p><code>FormParser</code> <a href="../../javadoc/bayou/form/FormParser.html#csrf" class=api><code>detects CSRF</code></a> by default, using a set of heuristics.</p>
+<p>The server app should parse every POST request with <code>parse(request)</code> before honoring the request, for the purpose of CSRF detection, even if there's nothing in the form data that the app needs to read.</p>
+<p>If a form contains no CSRF token, CSRF detection still works most of the time because of <code>Referrer/Origin</code> headers. However, to be safe, the server app should add <a href="../../javadoc/bayou/form/CsrfToken.html" class=api><code>CsrfToken</code></a> to all POST forms to prevent false detection of CSRF.</p>
+<pre>
+_form().method(&quot;POST&quot;).action(&quot;/addArticle&quot;).add(
+    ...
+    CsrfToken._input()
+    ...
+</pre>
+<p>To ensure that all POST forms contain CSRF tokens, define a convenient builder method:</p>
+<pre>
+Html5.FORM _form_post()
+{
+    return Html5.html5._form()
+        .method(&quot;POST&quot;)
+        .enctype(FormData.ENC_MULTIPART)
+        .add( CsrfToken._input() );
+}
+
+// usage example
+
+    _form_post().action(&quot;/logout&quot;).add( _button(&quot;Log Out&quot;) );
+
+// logout handler
+
+    if(!&quot;POST&quot;.equals(request.method()))
+        return HttpResponse.text(400, &quot;Bad Request&quot;);
+
+    return FormData
+        .parse(request)
+        .then( fd-&gt;
+        {
+            doLogout();
+            return HttpResponse.redirect(&quot;/afterLogout&quot;);
+        })
+        .catch_(CsrfException.class, e-&gt;
+        {
+            // silently ignore the request
+            return HttpResponse.redirect(&quot;/&quot;);
+        });
+</pre>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/release/0.9/docs/http/Form_Handling.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:12:38 GMT -->
+</html>

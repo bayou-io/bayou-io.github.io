@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/draft/response.style.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:11:47 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Don't give me an http response; I'll give you one.</title>
+		<link rel="stylesheet" type="text/css" href="../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../release/1.0/docs/index.html">Docs</a><a href="../code.html">Code</a><a href="../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="index.html">draft</a></p>
+
+<h1>Don't give me an http response; I'll give you one.</h1>
+
+<p><em>Zhong Yu, 2014-07-15</em></p>
+<p>In many server-side http frameworks, for every request, the framework creates a response object and passes it to the application; the application <em>pushes</em> response information (status, headers, body bytes) to the response object, e.g.</p>
+<pre>
+void handle(request, response){
+    response.setHeader(...)
+    response.body.write(data)
+    ...
+</pre>
+<p>We'll call this the <strong>push style</strong> in this article.</p>
+<p>In contrast, the <strong>pull style</strong> is such that the applications generates the response object and returns it to the framework; the framework <em>pulls</em> response information from the response object. The response body is a byte <em>source</em> instead of a sink.</p>
+<p>Bayou Framework (<a href="../index.html">http://bayou.io</a>) adopts the pull style; the <a href="../release/1.0/javadoc/bayou/http/HttpHandler.html"><code>HttpHandler</code></a> interface has a single abstract method</p>
+<pre>
+Async&lt;HttpResponse&gt; handle(HttpRequest)
+</pre>
+<p>Both <a href="../release/1.0/javadoc/bayou/http/HttpRequest.html"><code>HttpRequest</code></a> and <a href="../release/1.0/javadoc/bayou/http/HttpResponse.html"><code>HttpResponse</code></a> here are read-only.</p>
+
+<h2 id=Advantages_of_the_pull_style><a href=#Advantages_of_the_pull_style>Advantages of the pull style</a></h2>
+
+<p>The pull style is more friendly to consumers of responses - it's easy to inspect a response, transform it, pass it around, stored it somewhere and use/reuse it later. Consumers of responses include the framework, unit tests, libraries, and parent handlers. A parent handler may contain one or more child handlers forming a complex logic flow. See this example in the pull style</p>
+<pre>
+    response = cache.get(request.uri());
+    if(response!=null)
+        return response;
+
+    response = handlerA.handle(request);
+    if(response.statusCode()!=404)
+        return response;
+
+    response = handlerB.handle(request);
+    if(response.statusCode()==200){
+        response = cacheInMemory(response);
+        cache.put(request.uri(), response);
+    }
+    return response;
+</pre>
+<p><em>These things can be achieved in the push style, but it'll be awkward, and require more efforts by the application. The problem is that, the response object in the push style does not really represent the response concept in the typical OO sense; it's more of a container, an output parameter, of the real thing; yet the real thing is nameless in the push style.</em></p>
+<p>The pull style is more friendly to laziness - the consumer decides when to read the response body; if the body is not needed, no action is taken and no resource is invoked in vain. The application code usually does not need to do anything for laziness. Laziness is important for http, where a high percentage of requests are conditional requests (e.g. If-Modified-Since) to which responses are often body-less.</p>
+<p>Another form of laziness is 206 Partial response (to a Range request), useful in resuming a download, or jumping to a random video position. This is also easier in the pull style; all it takes is that the response body supports the <a href="../release/1.0/javadoc/bayou/bytes/ByteSource.html#skip-long-"><code>skip(n)</code></a> operation.</p>
+<p>APIs are more symmetric in the pull style - the response interface is very much like the request interface; and, the same request and response interfaces can be used on the client side as well as on the server side.</p>
+<p>Another minor but charming advantage is that in the pull style the compiler guarantees that one and only one response is returned. In the push style, however, it's difficult to enforce that statically - it's easy to forget to populate the response in some code branch, as well as it's easy to populate the response twice by mistake - the problems will only surface at runtime.</p>
+<p>The pull style is also more friendly to functional programming, if that's your preference.</p>
+
+<h2 id=Response_cookies><a href=#Response_cookies>Response cookies</a></h2>
+
+<p>Sometimes we want to set a response cookie in an early stage of a request-response cycle. This seems easier in the push style - since a mutable response is present from the beginning, we can add a cookie to the response at any time, as long as the response head is not "committed".</p>
+<p>In the pull style, the response object is yet to be created, so we'll need to stage the cookie somewhere temporarily, to be incorporated into the response later. This is inconvenient.</p>
+<p>Bayou provides a better abstraction, <a href="../release/1.0/docs/http/Http_Server.html#Cookies">CookieJar</a>, which models client cookies as a mutable map-like data structure. It gives the illusion that we are directly reading and modifying the client's cookie storage.</p>
+
+<h2 id=Response_body><a href=#Response_body>Response body</a></h2>
+
+<p>If the response body is based on an existing data source (for example, a file on disk, byte buffers in memory), the pull/source style is obviously the better choice.</p>
+<p>If the response body consists of dynamic content generated by an imperative program, the push/sink style is better - but, only in the threaded/blocking mode, where the thread executing the program automatically pauses/resumes on <code>body.write(data)</code> when the output buffer is full/free. This advantage of the push style does not apply in the async/non-blocking mode, where <code>write(data)</code> must not block, therefore the same program would have to run to completion without pause, and the output buffer would have to be unbounded and accept the entire body content.</p>
+<p>An optimization technique can be applied here in which the <code>write(data)</code> method simply queues the <code>data</code> object as is; at the end of the program, we get a list of data objects; if most of these objects are shared, for example, constant strings, or byte arrays from caches, the total memory consumed by multiple pending responses won't be too much. The list of data objects can then be serialized on demand to network bytes.</p>
+<p>It's worth mentioning Bayou's <a href="../release/1.0/docs/html/Html_Builder.html">Html Builder</a> here - we can build an html tree in an imperative program, then flatten it to a list of CharSequences; the list is then wrapped as a byte source, as the body of a response. If most of these CharSequences are shared, particularly the big ones, (or if they have internal laziness), the amortized memory footprint of html responses would be considerably small.</p>
+<p>If this optimization technique is not applicable in an application that also requires async mode, we'll have to break the program into smaller pieces, and arrange to run only one piece at a time. The complexity of doing this would be about the same in both push and pull styles. However, the pull style feels more natural here - the source maintains an internal state machine that advances on each <code>read()</code>, and each <code>read()</code> calculates a part of the body based on the current state.</p>
+
+<h2 id=Conclusion><a href=#Conclusion>Conclusion</a></h2>
+
+<p>All things considered, the pull style seems to be a better choice for an http framework, especially in an async/non-blocking environment. To coin a catch-phrase, <em>don't response me, I'll response you.</em></p>
+<p><em>Contact: <a href="mailto:&#98;&#97;&#x79;&#111;&#x75;&#x2d;&#x69;&#x6f;&#64;&#x67;&#111;&#111;g&#108;&#x65;&#x67;r&#x6f;&#117;&#112;&#115;&#x2e;&#99;o&#x6d;">&#98;&#97;&#x79;&#111;&#x75;&#x2d;&#x69;&#x6f;&#64;&#x67;&#111;&#111;g&#108;&#x65;&#x67;r&#x6f;&#117;&#112;&#115;&#x2e;&#99;o&#x6d;</a></em></p>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/draft/response.style.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:11:47 GMT -->
+</html>

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/release/0.9/docs/http/Client_SSL_Configuration.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:12:40 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Client SSL Configuration</title>
+		<link rel="stylesheet" type="text/css" href="../../../../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../../../../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../../../../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../../../../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../../../1.0/docs/index.html">Docs</a><a href="../../../../code.html">Code</a><a href="../../../../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="../index.html">Docs</a> &gt; <a href="Http_Client.html">Http Client</a> &gt; <a href="Client_SSL_Configuration.html">Client SSL Configuration</a></p>
+
+<h1>Client SSL Configuration</h1>
+
+<p>SSL is configured in <a href="../../javadoc/bayou/http/HttpClientConf.html" class=api><code>HttpClientConf</code></a> by <a href="../../javadoc/bayou/http/HttpClientConf.html#sslContext-javax.net.ssl.SSLContext-" class=api><code>sslContext</code></a> and <a href="../../javadoc/bayou/http/HttpClientConf.html#sslEngineConf-bayou.util.function.ConsumerX-" class=api><code>sslEngineConf</code></a>.</p>
+<p>Most client applications can use the default SSL configuration without change.</p>
+
+<h2 id=Root_CAs><a href=#Root_CAs>Root CAs</a></h2>
+
+<p>The JVM ships with a set of root CA certificates, stored in a system <em>trust store</em>, typically <code>JAVA-HOME/lib/security/cacerts</code>.</p>
+<p>By default, <code>HttpClient</code> uses these root CAs to authenticate server certificates. However, you may want to add additional CAs, or trust some self-signed server certificates. You can specify a different <a href="../../javadoc/bayou/ssl/SslConf.html#trustStoreFile-java.lang.String-" class=api><code>trustStoreFile</code></a> for <code>sslContext</code></p>
+<pre>
+        SSLContext sslContext = new SslConf()
+            .trustStoreFile(&quot;./my-ca-certs.jks&quot;)
+            .createContext();
+</pre>
+<p>You may also choose to trust all server certificates, including all self-signed ones, by <a href="../../javadoc/bayou/ssl/SslConf.html#trustAll--" class=api><code>trustAll()</code></a></p>
+<pre>
+        SSLContext sslContext = new SslConf()
+            .trustAll()
+            .createContext();
+</pre>
+
+<h2 id=Client_Certificate><a href=#Client_Certificate>Client Certificate</a></h2>
+
+<p>To specify a <a href="../../javadoc/bayou/ssl/SslConf.html#keyStoreFile-java.lang.String-" class=api><code>keyStoreFile</code></a> that stores the client certificate public-private key pair</p>
+<pre>
+        SSLContext sslContext = new SslConf()
+            .keyStoreType(&quot;pkcs12&quot;)
+            .keyStoreFile(&quot;./jane.p12&quot;)
+            .keyStorePass(PASSWORD)
+            .createContext();
+</pre>
+
+<h2 id=Using_keytool><a href=#Using_keytool>Using keytool</a></h2>
+
+<p>Some examples of using Java's <a href="https://docs.oracle.com/javase/8/docs/technotes/tools/unix/keytool.html">keytool</a>.</p>
+
+<h3>Add CA to trust store</h3>
+
+<p>Copy <code>JAVA-HOME/lib/security/cacerts</code> to <code>./my-ca-certs.jks</code>, list its content</p>
+<pre>
+&gt; keytool -list -v -keystore my-ca-certs.jks -storepass changeit
+</pre>
+<p>Add <code>localhost.cer</code>, a self-signed server certificate, to the store</p>
+<pre>
+&gt; keytool -importcert -alias localhost -file localhost.cer -keystore my-ca-certs.jks -storepass changeit
+</pre>
+
+<h3>Create a client certificate</h3>
+
+<p>Create a self-signed certificate for "Jane"</p>
+<pre>
+&gt; keytool -genkeypair -alias jane -keyalg RSA -validity 10000 -storetype pkcs12 -keystore jane.p12 -storepass password
+</pre>
+<p>To export the certificate to <code>jane.cer</code></p>
+<pre>
+&gt; keytool -exportcert -alias jane -file jane.cer -storetype pkcs12 -keystore jane.p12 -storepass password
+</pre>
+<p>Note the store type is <code>pkcs12</code>, not <code>jks</code>. To convert <code>pkcs12</code> to <code>jks</code></p>
+<pre>
+&gt; keytool -importkeystore -srcstoretype pkcs12 -deststoretype jks -srckeystore jane.p12 -srcstorepass password -destkeystore jane.jks
+</pre>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/release/0.9/docs/http/Client_SSL_Configuration.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:12:40 GMT -->
+</html>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+	
+<!-- Mirrored from bayou.io/release/1.0/docs/http/Proxy_and_Tunnels.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:09:45 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=UTF-8" /><!-- /Added by HTTrack -->
+<head>
+		<title>Proxy and Tunnels</title>
+		<link rel="stylesheet" type="text/css" href="../../../../site28f2.css?t-56be7398-0">
+		<link rel="shortcut icon" type="image/x-icon" href="../../../../favicon5323.ico?t-56be7384-0">
+		<link rel="stylesheet" type="text/css" href="../../../../deco5323.css?t-56be7384-0">
+	</head>
+	<body>
+		<div id="header">
+			<div id="logo">
+				<a href="../../../../index.html"><span id="logo1">bayou.io</span></a>
+			</div>
+			<div id="menu">
+				<a href="../index.html">Docs</a><a href="../../../../code.html">Code</a><a href="../../../../info.html">Info</a>
+			</div>
+		</div>
+		<div id="bodyMain">
+			<p>&gt; <a href="../index.html">Docs</a> &gt; <a href="Http_Client.html">Http Client</a> &gt; <a href="Proxy_and_Tunnels.html">Proxy and Tunnels</a></p>
+
+<h1>Proxy and Tunnels</h1>
+
+<p>By default, <code>HttpClient</code> establishes a direct connection to the server for transmitting the request and response.</p>
+<p>This can be changed by using proxy and tunnels.</p>
+
+<h2 id=Proxy><a href=#Proxy>Proxy</a></h2>
+
+<p>If a <a href="../../javadoc/bayou/http/HttpClientConf.html#proxy-bayou.http.HttpProxy-" class=api><code>proxy</code></a> is configured, requests will be sent to the proxy, instead of the servers. For example,</p>
+<pre>
+    HttpClient client = new HttpClientConf()
+        .proxy(&quot;some-http-proxy.com&quot;, 80)
+        .newClient();
+
+    client.doGet( &quot;https://example.com/path&quot; );
+</pre>
+<p>The client establishes a TCP connection to <code>some-http-proxy.com:80</code>, sends the request over this connection as</p>
+<pre>
+    GET https://example.com/path HTTP/1.1
+    ...
+</pre>
+
+<h2 id=Tunnels><a href=#Tunnels>Tunnels</a></h2>
+
+<p>A <a href="../../javadoc/bayou/tcp/TcpTunnel.html" class=api><code>TcpTunnel</code></a> forwards TCP data blindly between clients and servers.</p>
+<p>An <code>HttpClient</code> can be configured to use TCP <a href="../../javadoc/bayou/http/HttpClientConf.html#tunnels-bayou.tcp.TcpTunnel...-" class=api><code>tunnels</code></a>. For example</p>
+<pre>
+    // a local SOCKS5 tunnel created by PuTTY
+    TcpTunnel tunnel = new Socks5Tunnel(&quot;localhost&quot;, 9876);
+
+    HttpClient client = new HttpClientConf()
+        .tunnels(tunnel)
+        .newClient();
+
+    client.doGet( &quot;https://example.com/path&quot; );
+</pre>
+<p>The client connects to <code>localhost:9876</code>, performs SOCKS5 handshake, instructs it to tunnel to <code>example.com:443</code>. Now any data on this connection will be tunneled to/from <code>example.com:443</code>. The client then performs SSL handshake (because of <code>https</code>) over this connection with <code>example.com</code>, before sending the request.</p>
+<p>A chain of tunnels can be configured. Each request will go through every tunnel in the order specified. For example</p>
+<pre>
+    TcpTunnel tunnelA = new Socks5Tunnel(&quot;socks-proxy-A.com&quot;, 1080);
+    TcpTunnel tunnelB = new Socks5Tunnel(&quot;socks-proxy-B.com&quot;, 1080);
+
+    HttpClient client = new HttpClientConf()
+        .tunnels(tunnelA, tunnelB)
+        .newClient();
+
+    client.doGet( &quot;https://example.com/path&quot; );
+</pre>
+<p>The request will go through <code>socks-proxy-A.com</code>, then <code>socks-proxy-B.com</code>, before reaching <code>example.com</code>.</p>
+<p>If both tunnels and proxy are specified for an HttpClient, the requests will be sent through the tunnels to the proxy.</p>
+
+<h2 id=_HTTPS_Proxy_><a href=#_HTTPS_Proxy_>"HTTPS Proxy"</a></h2>
+
+<p><em>"HTTPS proxy"</em>, as it's commonly called, is actually a TCP tunnel which forwards <em>TCP data</em> blindly. Do not confuse it with <em>HTTP proxy</em> which forwards <em>HTTP messages</em>. (Although, it is possible to run HTTP+HTTPS proxy on the same server:port.)</p>
+<p>In <code>bayou.io</code>, <em>HTTPS proxy</em> is known as <a href="../../javadoc/bayou/http/ConnectTunnel.html" class=api><code>ConnectTunnel</code></a>. For <code>HttpClient</code>, it is a <em>tunnel</em>, not a <em>proxy</em>. For example</p>
+<pre>
+    TcpTunnel tunnel = new ConnectTunnel(&quot;some-httpS-proxy.com&quot;, 8000);
+
+    HttpClient client = new HttpClientConf()
+        .tunnels( tunnel )
+        .newClient();
+</pre>
+<p>Although <em>HTTPS proxy</em> is typically used for tunnelling end-to-end HTTPS traffic, it can be used to tunnel any TCP traffic, including plain HTTP. In the previous example, every request will go though the tunnel, regardless of whether it's <code>https</code>.</p>
+<p>For simplicity, the proxy and tunnels in an HttpClient apply to all requests. This is different from common browser configuration practices, where an <em>HTTP proxy</em> is used for <code>http</code> requests, and an <em>HTTPS proxy</em> is used for <code>https</code> requests. If you need to mimic that behavior, you can use two <code>HttpClient</code> instances, one with a <code>proxy</code>, one with a <code>ConnectTunnel</code>; send all <code>http</code> requests to the 1st client, and all <code>https</code> to the 2nd.</p>
+
+<h2 id=SSL__em_to_/em__Proxy_and_Tunnels><a href=#SSL__em_to_/em__Proxy_and_Tunnels>SSL <em>to</em> Proxy and Tunnels</a></h2>
+
+<p>Usually, the communication between the client and the proxy is in clear text. This is vulnerable to eavesdroppers though. To counter that, the proxy may support SSL connections with clients. That is independent of whether the requests are <code>https</code>. For example</p>
+<pre>
+        TcpAddress proxyAddress = new TcpAddress(/*ssl*/true, &quot;some-http-proxy.com&quot;, PORT);
+
+        clientConf.proxy( new HttpProxy(proxyAddress, null) );
+</pre>
+<p>The same applies to tunnels. Even if a client does end-to-end SSL with a server over a tunnel, the initial tunneling handshake between the client and the tunnel may contain sensitive information (e.g. the server address) that requires protection too. For these reasons, a tunnel may support SSL connections with clients. For example</p>
+<pre>
+        TcpAddress tunnelAddress = new TcpAddress(/*ssl*/true, &quot;some-socks-proxy.com&quot;, PORT);
+
+        clientConf.tunnels( new Socks5Tunnel(tunnelAddress, false, null) );
+</pre>
+<p>If hypothetically a very paranoid HttpClient is configured with 2 tunnels and a proxy, all requiring SSL, there will be 3 layers of SSL on the client end.</p>
+		</div>
+		<div id="footer">
+			bayou.io
+		</div>
+	</body>
+
+<!-- Mirrored from bayou.io/release/1.0/docs/http/Proxy_and_Tunnels.html by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 28 Feb 2020 22:09:45 GMT -->
+</html>
